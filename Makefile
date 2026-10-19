@@ -1,0 +1,31 @@
+CC ?= cc
+CFLAGS ?= -O2 -g
+SDL_CFLAGS := $(shell pkg-config --cflags sdl3)
+PREFIX ?= $(HOME)/.local
+
+HOOK := build/libnightcap_ac_hook.so
+
+.PHONY: all clean test install
+
+all: $(HOOK)
+
+# The hook only needs SDL3's headers; the real SDL comes from the process it
+# is preloaded into, so it is deliberately not linked against libSDL3.
+$(HOOK): hook/nightcap_ac_hook.c
+	@mkdir -p build
+	$(CC) $(CFLAGS) $(SDL_CFLAGS) -std=c11 -Wall -Wextra -fPIC -shared \
+		-fvisibility=hidden -o $@ $< -ldl -lpthread
+
+test: $(HOOK)
+	python3 -m unittest discover -s tests -v
+
+install: $(HOOK)
+	install -Dm755 $(HOOK) $(PREFIX)/lib/nightcap-ac/libnightcap_ac_hook.so
+	install -Dm755 scripts/nightcap-ac $(PREFIX)/bin/nightcap-ac
+	install -Dm644 packaging/nightcap-ac.desktop $(PREFIX)/share/applications/nightcap-ac.desktop
+	install -Dm644 packaging/nightcap-ac-roblox.desktop $(PREFIX)/share/applications/nightcap-ac-roblox.desktop
+	mkdir -p $(PREFIX)/share/nightcap-ac
+	cp -r nightcap_ac $(PREFIX)/share/nightcap-ac/
+
+clean:
+	rm -rf build

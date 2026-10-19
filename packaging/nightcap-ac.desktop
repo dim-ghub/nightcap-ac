@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Nightcap AC
+GenericName=Animalese chat voice
+Comment=Speak your Roblox chat into voice chat as Animal Crossing speech
+Exec=nightcap-ac
+Icon=audio-input-microphone
+Categories=AudioVideo;Audio;Game;
+Terminal=false

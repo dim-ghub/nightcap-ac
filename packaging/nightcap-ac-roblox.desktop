@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Nightcap (Animalese chat)
+GenericName=Roblox Player
+Comment=Start Nightcap with the Nightcap AC chat hook
+Exec=env SDL_VIDEODRIVER=wayland,x11 nightcap-ac launch %u
+Icon=io.github.CoderDayton.nightcap
+StartupWMClass=io.github.CoderDayton.nightcap
+Categories=Game;
+Terminal=false

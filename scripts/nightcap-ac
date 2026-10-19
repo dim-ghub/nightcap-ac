@@ -1,0 +1,12 @@
+#!/bin/sh
+# Runs nightcap-ac from a source checkout or from `make install`.
+here="$(dirname "$(readlink -f "$0")")"
+for dir in "$here/../share/nightcap-ac" "$here/.."; do
+  if [ -d "$dir/nightcap_ac" ]; then
+    PYTHONPATH="$(readlink -f "$dir")${PYTHONPATH:+:$PYTHONPATH}"
+    export PYTHONPATH
+    exec python3 -m nightcap_ac "$@"
+  fi
+done
+echo "nightcap-ac: package not found next to $0" >&2
+exit 1
