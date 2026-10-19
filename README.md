@@ -146,3 +146,7 @@ make test     # builds the hook, then runs the unit and hook tests
 the way Nightcap does. The tests check that keystrokes are reported exactly
 once, that nothing leaks outside a focused box, and that password text stays
 private.
+
+## License
+
+GPL-3.0-or-later. See [LICENSE](LICENSE).
