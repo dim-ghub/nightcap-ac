@@ -43,12 +43,44 @@ microphone carries the voice into Roblox voice chat.
 ## Install
 
 ```bash
+git clone https://github.com/dim-ghub/nightcap-ac
+cd nightcap-ac
 make
 make install          # into ~/.local (PREFIX=... to change)
 ```
 
 This adds two launcher entries: **Nightcap AC** (the settings window) and
 **Nightcap (Animalese chat)** (Nightcap started with the hook).
+
+At the end, `make install` asks whether to patch Nightcap's own launcher:
+
+```
+Patch it? [y/N]
+```
+
+Answering **y** writes a copy of Nightcap's `.desktop` entry to
+`~/.local/share/applications/io.github.CoderDayton.nightcap.desktop`, with
+its main command changed to `nightcap-ac launch`. That copy takes priority
+over the system entry, so the normal **Nightcap** launcher and `roblox://`
+links (clicking Join on the website) start Nightcap with the hook. The
+Settings action is unchanged. The copy leaves out Nightcap's
+`X-Mocktail-Managed` marker, so Nightcap's `register_url_handler.sh` won't
+overwrite it. If you already had your own entry at that path, it is backed
+up and restored on removal.
+
+You can manage the patch any time:
+
+```bash
+nightcap-ac desktop install     # patch (no prompt)
+nightcap-ac desktop remove      # undo
+nightcap-ac desktop status
+```
+
+For scripted installs, `NIGHTCAP_AC_DESKTOP=y make install` (or `=n`) answers
+the prompt. Without a terminal the patch is skipped.
+
+To update, run `git pull && make install`. To remove everything, including
+the patch, run `make uninstall`.
 
 To run from the source tree without installing:
 
@@ -61,14 +93,34 @@ make
 ## Use
 
 1. Start Nightcap through **Nightcap (Animalese chat)**, the **Launch
-   Nightcap** button, or `nightcap-ac launch`. The settings window opens
-   too if it isn't running yet.
+   Nightcap** button, or `nightcap-ac launch`. If you patched the launcher,
+   the normal **Nightcap** entry and `roblox://` links work too.
 2. Join a game with voice chat and unmute your mic in Roblox.
 3. Chat as usual (`/` or click the chat bar, type, press Enter). The message
    plays in voice chat as Animalese.
 
-Nightcap only lets one copy run at a time. If Nightcap is already open
-without the hook, close it first, or `launch` just forwards to the open copy.
+### What launching does
+
+`nightcap-ac launch` (and every launcher entry above) checks what is running
+first:
+
+| Nightcap is... | What happens |
+| --- | --- |
+| not running | The settings window opens and Nightcap starts with the hook |
+| running with the hook | The settings window comes to the front. A clicked `roblox://` link goes straight to the running Nightcap |
+| running **without** the hook | The settings window offers to restart Nightcap. **Rejoin the same server** puts you back in the server you were in. If you clicked a join link, the restart opens that link instead |
+
+Nightcap AC finds the running Nightcap the way Nightcap's own settings window
+does, through the process holding its instance lock. Whether the hook is
+loaded comes from that process's memory map. Rejoining reads the last
+`Joining game '<server>' place <id>` line from that session's log and
+restarts with `--launch-uri roblox://experiences/start?placeId=..&gameInstanceId=..`.
+That is the same approach as Cocktail.
+The restart closes Nightcap with SIGTERM (it leaves the game cleanly) and
+waits up to 20 seconds before forcing it.
+
+Opening `nightcap-ac` again while it is already running just brings its
+window to the front.
 
 ### Settings
 

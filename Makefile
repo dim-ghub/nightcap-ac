@@ -5,7 +5,7 @@ PREFIX ?= $(HOME)/.local
 
 HOOK := build/libnightcap_ac_hook.so
 
-.PHONY: all clean test install
+.PHONY: all clean test install uninstall
 
 all: $(HOOK)
 
@@ -25,7 +25,17 @@ install: $(HOOK)
 	install -Dm644 packaging/nightcap-ac.desktop $(PREFIX)/share/applications/nightcap-ac.desktop
 	install -Dm644 packaging/nightcap-ac-roblox.desktop $(PREFIX)/share/applications/nightcap-ac-roblox.desktop
 	mkdir -p $(PREFIX)/share/nightcap-ac
+	rm -rf $(PREFIX)/share/nightcap-ac/nightcap_ac
 	cp -r nightcap_ac $(PREFIX)/share/nightcap-ac/
+	@# Asks y/n before touching Nightcap's launcher (NIGHTCAP_AC_DESKTOP=y|n skips the question).
+	@$(PREFIX)/bin/nightcap-ac desktop ask --exec $(PREFIX)/bin/nightcap-ac
+
+uninstall:
+	-@$(PREFIX)/bin/nightcap-ac desktop remove
+	rm -f $(PREFIX)/bin/nightcap-ac
+	rm -rf $(PREFIX)/lib/nightcap-ac $(PREFIX)/share/nightcap-ac
+	rm -f $(PREFIX)/share/applications/nightcap-ac.desktop
+	rm -f $(PREFIX)/share/applications/nightcap-ac-roblox.desktop
 
 clean:
 	rm -rf build

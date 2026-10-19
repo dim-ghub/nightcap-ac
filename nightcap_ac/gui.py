@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import threading
 from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
-    QApplication, QButtonGroup, QCheckBox, QComboBox, QFileDialog, QFormLayout,
+    QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
+    QFileDialog, QFormLayout,
     QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMenu,
     QMessageBox, QPlainTextEdit, QPushButton, QRadioButton, QSlider,
     QSystemTrayIcon, QVBoxLayout, QWidget,
@@ -20,10 +22,48 @@ from .animalese import STYLES, VOICES
 from .audio import AudioError, list_microphones
 from .config import OUTPUT_MODES, Config
 from .engine import Engine, Status
+from .hook import is_listening
+from .launcher import restart, send_to_app
+from .nightcap import Game, current_game, find_pid, is_hooked, launch_uri_in, session_log
 
 
 class _Bridge(QObject):
     status = Signal(object)
+    command = Signal(str, object)
+    restart_done = Signal(str)
+
+
+class RestartDialog(QDialog):
+    """Offered when Nightcap is already running without the hook."""
+
+    def __init__(self, parent: QWidget | None, args: list[str], game: Game | None):
+        super().__init__(parent)
+        self.setWindowTitle("Restart Nightcap?")
+        layout = QVBoxLayout(self)
+        intro = QLabel("Nightcap is already running without Animalese chat. "
+                       "Restart it so your chat messages are spoken?")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        self.rejoin = QCheckBox()
+        if launch_uri_in(args):
+            note = QLabel("Nightcap will open the game from the link you clicked.")
+            note.setWordWrap(True)
+            layout.addWidget(note)
+            self.rejoin.setChecked(False)
+        else:
+            if game is not None:
+                self.rejoin.setText(f"Rejoin the same server (place {game.place_id})")
+                self.rejoin.setChecked(True)
+            else:
+                self.rejoin.setText("Rejoin the same server (not in a game right now)")
+                self.rejoin.setEnabled(False)
+            layout.addWidget(self.rejoin)
+        buttons = QDialogButtonBox()
+        buttons.addButton("Restart Nightcap", QDialogButtonBox.ButtonRole.AcceptRole)
+        buttons.addButton("Not now", QDialogButtonBox.ButtonRole.RejectRole)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
 
 
 def _slider(lo: int, hi: int, value: int) -> QSlider:
@@ -65,7 +105,7 @@ class Window(QMainWindow):
         launch_row = QHBoxLayout()
         launch = QPushButton("Launch Nightcap")
         launch.setToolTip("Starts Nightcap with the chat hook loaded")
-        launch.clicked.connect(self._launch)
+        launch.clicked.connect(lambda: self._launch())
         launch_row.addWidget(launch)
         launch_row.addStretch()
         layout.addLayout(launch_row)
@@ -169,8 +209,54 @@ class Window(QMainWindow):
         self.setCentralWidget(root)
         self._log_seen = 0
         self._refresh_labels()
+        self._bridge = bridge
+        self._restarting = False
         bridge.status.connect(self._on_status)
+        bridge.command.connect(self.handle_command)
+        bridge.restart_done.connect(self.log.appendPlainText)
         self._on_status(engine.status)
+
+    def bring_up(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def handle_command(self, command: str, payload: dict) -> None:
+        if command == "show":
+            self.bring_up()
+        elif command == "offer-restart":
+            self.bring_up()
+            self._offer_restart(payload)
+
+    def _offer_restart(self, payload: dict) -> None:
+        if self._restarting:
+            return
+        args = [str(a) for a in payload.get("args", [])]
+        pid = payload.get("pid")
+        if not isinstance(pid, int):
+            pid = find_pid()
+        # It may have been closed or restarted since the request was sent.
+        if pid is None or is_hooked(pid):
+            if pid is None:
+                self._launch(args)
+            return
+        game = None if launch_uri_in(args) else current_game(session_log(pid))
+        dialog = RestartDialog(self, args, game)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._restarting = True
+        self.log.appendPlainText("closing Nightcap...")
+        rejoin = dialog.rejoin.isChecked()
+
+        def work() -> None:
+            try:
+                message = restart(pid, args, rejoin)
+            except RuntimeError as e:
+                message = str(e)
+            self._restarting = False
+            self._bridge.restart_done.emit(message)
+
+        threading.Thread(target=work, daemon=True, name="restart").start()
 
     @staticmethod
     def _with_label(slider: QSlider, label: QLabel) -> QWidget:
@@ -213,8 +299,8 @@ class Window(QMainWindow):
             self.pack.setText(folder)
             self._set(sample_pack=folder)
 
-    def _launch(self) -> None:
-        subprocess.Popen([sys.executable, "-m", "nightcap_ac", "launch"],
+    def _launch(self, args: list[str] | None = None) -> None:
+        subprocess.Popen([sys.executable, "-m", "nightcap_ac", "launch", *(args or [])],
                          cwd=str(Path(__file__).resolve().parent.parent),
                          start_new_session=True)
 
@@ -251,12 +337,16 @@ class Window(QMainWindow):
             event.accept()
 
 
-def run() -> int:
+def run(command: str = "", payload: dict | None = None) -> int:
+    if is_listening():
+        # Already running: hand over the request (or just raise the window).
+        send_to_app(command if command and command != "started" else "show", payload)
+        return 0
     app = QApplication(sys.argv)
     app.setApplicationName("Nightcap AC")
     app.setDesktopFileName("nightcap-ac")
     bridge = _Bridge()
-    engine = Engine(Config.load(), bridge.status.emit)
+    engine = Engine(Config.load(), bridge.status.emit, bridge.command.emit)
     try:
         engine.start()
     except RuntimeError as e:
@@ -265,6 +355,8 @@ def run() -> int:
     except AudioError as e:
         QMessageBox.warning(None, "Nightcap AC", str(e))
     window = Window(engine, bridge)
+    if command:
+        QTimer.singleShot(300, lambda: window.handle_command(command, payload or {}))
 
     if QSystemTrayIcon.isSystemTrayAvailable():
         tray = QSystemTrayIcon(QIcon.fromTheme("audio-input-microphone"), app)

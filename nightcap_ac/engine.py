@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import queue
 import threading
 import time
@@ -12,6 +13,9 @@ from .animalese import SamplePack, synthesize
 from .audio import SINK, AudioError, Player, StreamWatcher, VirtualMic
 from .config import Config
 from .hook import ChatTracker, HookListener
+
+# Sent by `nightcap-ac launch` and by a second `nightcap-ac` start.
+APP_COMMANDS = {"show", "offer-restart", "started"}
 
 
 @dataclass
@@ -28,8 +32,10 @@ class Status:
 
 class Engine:
     def __init__(self, config: Config,
-                 on_status: Callable[[Status], None] = lambda s: None):
+                 on_status: Callable[[Status], None] = lambda s: None,
+                 on_command: Callable[[str, dict], None] = lambda c, p: None):
         self.config = config
+        self._on_command = on_command
         self.status = Status()
         self._on_status = on_status
         self._tracker = ChatTracker()
@@ -138,6 +144,13 @@ class Engine:
     # -- hook events -------------------------------------------------------
 
     def _on_hook_event(self, kind: str, fields: list[str]) -> None:
+        if kind in APP_COMMANDS:
+            try:
+                payload = json.loads(fields[0]) if fields else {}
+            except ValueError:
+                payload = {}
+            self._on_command(kind, payload if isinstance(payload, dict) else {})
+            return
         if kind == "hello":
             if fields and fields[0].isdigit():
                 self.status.nightcap_pid = int(fields[0])

@@ -4,11 +4,14 @@
   nightcap-ac --headless      run without a window
   nightcap-ac launch [ARGS]   start Nightcap with the hook (ARGS go to Nightcap)
   nightcap-ac say TEXT        speak TEXT with the saved settings
+  nightcap-ac desktop install|remove|status
+                              make Nightcap's launcher and roblox:// links use the hook
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import signal
 import sys
 import threading
@@ -30,7 +33,13 @@ def _headless() -> int:
             print(line, flush=True)
         seen = status.log_seq
 
-    engine = Engine(Config.load(), on_status)
+    def on_command(command, payload) -> None:
+        if command == "offer-restart":
+            print("Nightcap is running without the chat hook. Close it, then run "
+                  "`nightcap-ac launch` (or use the settings window to restart it).",
+                  flush=True)
+
+    engine = Engine(Config.load(), on_status, on_command)
     try:
         engine.start()
     except RuntimeError as e:
@@ -83,6 +92,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="nightcap-ac", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--headless", action="store_true")
+    # Used by `nightcap-ac launch` to pass a request to a freshly started app.
+    parser.add_argument("--command", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--payload", default="{}", help=argparse.SUPPRESS)
     sub = parser.add_subparsers(dest="command")
     say = sub.add_parser("say", help="speak text with the current settings")
     say.add_argument("text", nargs="+")
@@ -92,14 +104,38 @@ def main(argv: list[str] | None = None) -> int:
     say.add_argument("--pitch", type=float)
     say.add_argument("--speed", type=float)
     sub.add_parser("launch", help="start Nightcap with the hook preloaded")
+    desk = sub.add_parser("desktop", help="patch Nightcap's launcher and roblox:// links")
+    desk.add_argument("action", choices=["install", "remove", "status", "ask"])
+    desk.add_argument("--exec", dest="launcher",
+                      help="nightcap-ac path to put in the entry (default: found on PATH)")
     args = parser.parse_args(argv)
+
+    if args.command == "desktop":
+        from . import desktop
+        if args.action == "ask":
+            return desktop.ask_and_install(args.launcher)
+        try:
+            if args.action == "install":
+                print(desktop.install(args.launcher))
+            elif args.action == "remove":
+                print(desktop.remove())
+            else:
+                print(desktop.status())
+        except (OSError, ValueError) as e:
+            print(f"nightcap-ac: {e}", file=sys.stderr)
+            return 1
+        return 0
 
     if args.command == "say":
         return _say(args)
     if args.headless:
         return _headless()
     from .gui import run
-    return run()
+    try:
+        payload = json.loads(args.payload)
+    except ValueError:
+        payload = {}
+    return run(args.command, payload if isinstance(payload, dict) else {})
 
 
 if __name__ == "__main__":
