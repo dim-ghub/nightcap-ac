@@ -25,7 +25,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import nightcap
+from . import instance, nightcap
 from .hook import is_listening, socket_path
 
 HOOK_NAME = nightcap.HOOK_NAME
@@ -53,9 +53,17 @@ def _flatpak_installed() -> bool:
 
 
 def send_to_app(command: str, payload: dict | None = None) -> None:
-    """Hand a command to the settings app, starting it if needed."""
+    """Hand a command to the settings app, starting it if needed.
+
+    An app running older code is replaced rather than sent the command,
+    since it may not understand it.
+    """
     body = json.dumps(payload or {})
-    if is_listening():
+    state = instance.running_app()
+    if state == "stale":
+        instance.replace_stale()
+        state = instance.running_app()
+    if state == "current":
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         try:
             sock.sendto(f"{command}\t{body}".encode(), str(socket_path()))
@@ -70,7 +78,7 @@ def send_to_app(command: str, payload: dict | None = None) -> None:
 
 
 def ensure_app_running() -> None:
-    if not is_listening():
+    if instance.running_app() != "current":
         send_to_app("started")
 
 

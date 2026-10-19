@@ -22,7 +22,7 @@ from .animalese import STYLES, VOICES
 from .audio import AudioError, list_microphones
 from .config import OUTPUT_MODES, Config
 from .engine import Engine, Status
-from .hook import is_listening
+from .instance import replace_stale, running_app
 from .launcher import restart, send_to_app
 from .nightcap import Game, current_game, find_pid, is_hooked, launch_uri_in, session_log
 
@@ -335,16 +335,23 @@ class Window(QMainWindow):
     def closeEvent(self, event) -> None:  # noqa: N802 (Qt naming)
         if QSystemTrayIcon.isSystemTrayAvailable() and getattr(self, "tray", None):
             self.hide()
+            self.tray.showMessage("Nightcap AC", "Still running in the tray. Open Nightcap AC "
+                                  "again or click the tray icon for settings; quit from its menu.")
             event.ignore()
         else:
             event.accept()
 
 
 def run(command: str = "", payload: dict | None = None) -> int:
-    if is_listening():
+    state = running_app()
+    if state == "current":
         # Already running: hand over the request (or just raise the window).
         send_to_app(command if command and command != "started" else "show", payload)
         return 0
+    if state == "stale" and not replace_stale():
+        QMessageBox.warning(None, "Nightcap AC", "An older Nightcap AC is still running "
+                            "and would not close. Quit it from its tray icon and try again.")
+        return 1
     app = QApplication(sys.argv)
     app.setApplicationName("Nightcap AC")
     app.setDesktopFileName("nightcap-ac")

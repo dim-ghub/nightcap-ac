@@ -12,6 +12,7 @@ from dataclasses import dataclass, field, replace
 from .animalese import SamplePack, synthesize
 from .audio import SINK, AudioError, Player, StreamWatcher, VirtualMic
 from .config import Config
+from . import instance, nightcap
 from .hook import ChatTracker, HookListener
 
 # Sent by `nightcap-ac launch` and by a second `nightcap-ac` start.
@@ -59,7 +60,13 @@ class Engine:
     def start(self) -> None:
         self._running = True
         self._listener.bind()
+        instance.write_info()
         self._listener.start()
+        # A hooked Nightcap that started before this app (say, before an
+        # update replaced the old app) won't say hello again; look for it.
+        pid = nightcap.find_pid()
+        if pid is not None and nightcap.is_hooked(pid):
+            self.status.nightcap_pid = pid
         self._worker.start()
         self._router.start()
         self._watcher.start()
@@ -69,6 +76,7 @@ class Engine:
     def stop(self) -> None:
         self._running = False
         self._listener.stop()
+        instance.clear_info()
         self._watcher.stop()
         self._player.stop()
         self._speech.put(None)
