@@ -224,6 +224,9 @@ class Window(QMainWindow):
     def handle_command(self, command: str, payload: dict) -> None:
         if command == "show":
             self.bring_up()
+        elif command == "error":
+            self.bring_up()
+            QMessageBox.warning(self, "Nightcap AC", str(payload.get("message", "")))
         elif command == "offer-restart":
             self.bring_up()
             self._offer_restart(payload)

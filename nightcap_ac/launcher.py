@@ -1,6 +1,11 @@
 """Starts Nightcap with the SDL hook preloaded.
 
-`nightcap-ac launch` decides what to do from what is running:
+Opening Nightcap AC (`nightcap-ac`) runs open_app(): it starts Nightcap with
+the hook if it isn't running, then shows the settings window, offering a
+restart (with rejoin) if Nightcap is running without the hook.
+
+`nightcap-ac launch`, used by the patched Nightcap entry and roblox:// links,
+decides what to do from what is running:
 
 * Nightcap running with the hook: bring up the settings window (or, when a
   roblox:// link was opened, pass the link to the running Nightcap).
@@ -92,10 +97,13 @@ def launch(args: list[str], use_flatpak: bool | None = None,
     return _exec_nightcap(args, hook, use_flatpak)
 
 
-def _exec_nightcap(args: list[str], hook: Path | None, use_flatpak: bool | None) -> int:
+def nightcap_command(args: list[str], hook: Path | None,
+                     use_flatpak: bool | None = None) -> tuple[list[str], dict[str, str]]:
+    """The command and environment that start Nightcap (with the hook if given)."""
     native = shutil.which("mocktail")
     if use_flatpak is None:
         use_flatpak = native is None and _flatpak_installed()
+    env = dict(os.environ)
     if use_flatpak:
         cmd = ["flatpak", "run"]
         if hook is not None:
@@ -103,17 +111,48 @@ def _exec_nightcap(args: list[str], hook: Path | None, use_flatpak: bool | None)
                     f"--filesystem={socket_path().parent}",
                     f"--env=LD_PRELOAD={hook}",
                     f"--env=NIGHTCAP_AC_SOCKET={socket_path()}"]
-        cmd += [FLATPAK_ID, *args]
-        os.execvp(cmd[0], cmd)
+        return cmd + [FLATPAK_ID, *args], env
     if native is None:
-        print("nightcap-ac: Nightcap (mocktail) is not installed", file=sys.stderr)
-        return 1
-    env = dict(os.environ)
+        raise FileNotFoundError("Nightcap (mocktail) is not installed")
     if hook is not None:
         preload = env.get("LD_PRELOAD", "")
         env["LD_PRELOAD"] = f"{hook}:{preload}" if preload else str(hook)
-    os.execvpe(native, [native, *args], env)
+    env.setdefault("SDL_VIDEODRIVER", "wayland,x11")  # as Nightcap's own entry does
+    return [native, *args], env
+
+
+def _exec_nightcap(args: list[str], hook: Path | None, use_flatpak: bool | None) -> int:
+    try:
+        cmd, env = nightcap_command(args, hook, use_flatpak)
+    except FileNotFoundError as e:
+        print(f"nightcap-ac: {e}", file=sys.stderr)
+        return 1
+    os.execvpe(cmd[0], cmd, env)
     return 0  # unreachable
+
+
+def open_app() -> tuple[str, dict]:
+    """What opening Nightcap AC itself does, before its window shows.
+
+    Starts Nightcap with the hook when it isn't running. Returns the command
+    for the settings window: just show it, or offer to restart a Nightcap
+    that is running without the hook.
+    """
+    pid = nightcap.find_pid()
+    if pid is not None:
+        if nightcap.is_hooked(pid):
+            return "show", {}
+        return "offer-restart", {"pid": pid, "args": []}
+    hook = find_hook()
+    if hook is None:
+        return "error", {"message": "The chat hook is missing; run `make install` again."}
+    try:
+        cmd, env = nightcap_command([], hook)
+    except FileNotFoundError as e:
+        return "error", {"message": str(e)}
+    subprocess.Popen(cmd, env=env, start_new_session=True,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return "show", {}
 
 
 def restart(pid: int, args: list[str], rejoin: bool) -> str:

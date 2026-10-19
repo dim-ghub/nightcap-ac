@@ -166,5 +166,60 @@ class LaunchDecisionTest(unittest.TestCase):
         self.assertIsNotNone(run.call_args[0][1])  # with the hook
 
 
+class OpenAppTest(unittest.TestCase):
+    """Opening Nightcap AC itself (the launcher entry)."""
+
+    def open(self, pid, hooked):
+        with mock.patch.object(launcher.nightcap, "find_pid", return_value=pid), \
+             mock.patch.object(launcher.nightcap, "is_hooked", return_value=hooked), \
+             mock.patch.object(launcher, "find_hook", return_value=Path("/x/hook.so")), \
+             mock.patch.object(launcher, "nightcap_command",
+                               return_value=(["mocktail"], {})) as build, \
+             mock.patch.object(launcher.subprocess, "Popen") as popen:
+            result = launcher.open_app()
+        return result, build, popen
+
+    def test_not_running_starts_nightcap_with_the_hook(self):
+        result, build, popen = self.open(None, False)
+        self.assertEqual(result, ("show", {}))
+        build.assert_called_once_with([], Path("/x/hook.so"))
+        popen.assert_called_once()
+
+    def test_running_with_the_hook_just_opens_settings(self):
+        result, _, popen = self.open(10, True)
+        self.assertEqual(result, ("show", {}))
+        popen.assert_not_called()
+
+    def test_running_without_the_hook_offers_a_restart(self):
+        result, _, popen = self.open(10, False)
+        self.assertEqual(result, ("offer-restart", {"pid": 10, "args": []}))
+        popen.assert_not_called()
+
+
+class MainDispatchTest(unittest.TestCase):
+    def test_spawned_app_keeps_its_command(self):
+        from nightcap_ac import __main__ as cli
+        with mock.patch("nightcap_ac.gui.run", return_value=0) as run, \
+             mock.patch.object(launcher, "open_app") as open_app:
+            cli.main(["--command", "offer-restart", "--payload", '{"pid": 5}'])
+        run.assert_called_once_with("offer-restart", {"pid": 5})
+        open_app.assert_not_called()
+
+    def test_plain_start_runs_the_launch_logic(self):
+        from nightcap_ac import __main__ as cli
+        with mock.patch("nightcap_ac.gui.run", return_value=0) as run, \
+             mock.patch.object(launcher, "open_app", return_value=("show", {})):
+            cli.main([])
+        run.assert_called_once_with("show", {})
+
+    def test_no_launch_only_opens_settings(self):
+        from nightcap_ac import __main__ as cli
+        with mock.patch("nightcap_ac.gui.run", return_value=0) as run, \
+             mock.patch.object(launcher, "open_app") as open_app:
+            cli.main(["--no-launch"])
+        run.assert_called_once_with("show", {})
+        open_app.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

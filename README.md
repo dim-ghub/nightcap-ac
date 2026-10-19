@@ -49,8 +49,9 @@ make
 make install          # into ~/.local (PREFIX=... to change)
 ```
 
-This adds two launcher entries: **Nightcap AC** (the settings window) and
-**Nightcap (Animalese chat)** (Nightcap started with the hook).
+This adds one launcher entry, **Nightcap AC**. It starts Nightcap with the
+hook and opens the settings window (see [What opening it does](#what-opening-nightcap-ac-does)).
+Its **Settings only** action opens just the window.
 
 At the end, `make install` asks whether to patch Nightcap's own launcher:
 
@@ -86,29 +87,30 @@ To run from the source tree without installing:
 
 ```bash
 make
-./scripts/nightcap-ac            # settings window
-./scripts/nightcap-ac launch     # start Nightcap with the hook
+./scripts/nightcap-ac              # start Nightcap with the hook + settings
+./scripts/nightcap-ac --no-launch  # settings window only
 ```
 
 ## Use
 
-1. Start Nightcap through **Nightcap (Animalese chat)**, the **Launch
-   Nightcap** button, or `nightcap-ac launch`. If you patched the launcher,
-   the normal **Nightcap** entry and `roblox://` links work too.
+1. Open **Nightcap AC** from your app launcher (or run `nightcap-ac`).
 2. Join a game with voice chat and unmute your mic in Roblox.
 3. Chat as usual (`/` or click the chat bar, type, press Enter). The message
    plays in voice chat as Animalese.
 
-### What launching does
-
-`nightcap-ac launch` (and every launcher entry above) checks what is running
-first:
+### What opening Nightcap AC does
 
 | Nightcap is... | What happens |
 | --- | --- |
-| not running | The settings window opens and Nightcap starts with the hook |
-| running with the hook | The settings window comes to the front. A clicked `roblox://` link goes straight to the running Nightcap |
-| running **without** the hook | The settings window offers to restart Nightcap. **Rejoin the same server** puts you back in the server you were in. If you clicked a join link, the restart opens that link instead |
+| not running | Nightcap starts with the hook and the settings window opens |
+| running with the hook | The settings window opens, or comes to the front if it is already open |
+| running **without** the hook | The settings window offers to restart Nightcap with the hook. **Rejoin the same server** puts you back in the server you were in |
+
+If you patched Nightcap's launcher, the normal **Nightcap** entry and
+`roblox://` links (clicking Join on the website) go through
+`nightcap-ac launch`. It works the same way, with one difference: a clicked
+link is passed to a running, hooked Nightcap without popping up the settings
+window, and a restart opens the clicked link instead of rejoining.
 
 Nightcap AC finds the running Nightcap the way Nightcap's own settings window
 does, through the process holding its instance lock. Whether the hook is

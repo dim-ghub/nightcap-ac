@@ -1,6 +1,7 @@
 """nightcap-ac command line.
 
-  nightcap-ac                 open the settings window (and start listening)
+  nightcap-ac                 start Nightcap with the hook (if needed) and open settings
+  nightcap-ac --no-launch     only open the settings window
   nightcap-ac --headless      run without a window
   nightcap-ac launch [ARGS]   start Nightcap with the hook (ARGS go to Nightcap)
   nightcap-ac say TEXT        speak TEXT with the saved settings
@@ -92,8 +93,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="nightcap-ac", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--headless", action="store_true")
+    parser.add_argument("--no-launch", action="store_true",
+                        help="only open the settings window; don't start Nightcap")
     # Used by `nightcap-ac launch` to pass a request to a freshly started app.
-    parser.add_argument("--command", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--command", dest="app_command", default="", help=argparse.SUPPRESS)
     parser.add_argument("--payload", default="{}", help=argparse.SUPPRESS)
     sub = parser.add_subparsers(dest="command")
     say = sub.add_parser("say", help="speak text with the current settings")
@@ -131,11 +134,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.headless:
         return _headless()
     from .gui import run
-    try:
-        payload = json.loads(args.payload)
-    except ValueError:
-        payload = {}
-    return run(args.command, payload if isinstance(payload, dict) else {})
+    if args.app_command:
+        try:
+            payload = json.loads(args.payload)
+        except ValueError:
+            payload = {}
+        return run(args.app_command, payload if isinstance(payload, dict) else {})
+    if args.no_launch:
+        return run("show", {})
+    from .launcher import open_app
+    return run(*open_app())
 
 
 if __name__ == "__main__":

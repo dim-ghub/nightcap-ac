@@ -23,7 +23,8 @@ install: $(HOOK)
 	install -Dm755 $(HOOK) $(PREFIX)/lib/nightcap-ac/libnightcap_ac_hook.so
 	install -Dm755 scripts/nightcap-ac $(PREFIX)/bin/nightcap-ac
 	install -Dm644 packaging/nightcap-ac.desktop $(PREFIX)/share/applications/nightcap-ac.desktop
-	install -Dm644 packaging/nightcap-ac-roblox.desktop $(PREFIX)/share/applications/nightcap-ac-roblox.desktop
+	@# Older versions installed a separate launcher entry; Nightcap AC does both now.
+	rm -f $(PREFIX)/share/applications/nightcap-ac-roblox.desktop
 	mkdir -p $(PREFIX)/share/nightcap-ac
 	rm -rf $(PREFIX)/share/nightcap-ac/nightcap_ac
 	cp -r nightcap_ac $(PREFIX)/share/nightcap-ac/

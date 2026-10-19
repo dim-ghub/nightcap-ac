@@ -1,9 +1,14 @@
 [Desktop Entry]
 Type=Application
 Name=Nightcap AC
-GenericName=Animalese chat voice
-Comment=Speak your Roblox chat into voice chat as Animal Crossing speech
+GenericName=Roblox Player with Animalese chat
+Comment=Start Nightcap with Animalese chat and open its settings
 Exec=nightcap-ac
-Icon=audio-input-microphone
-Categories=AudioVideo;Audio;Game;
+Icon=io.github.CoderDayton.nightcap
+Categories=Game;
 Terminal=false
+Actions=settings;
+
+[Desktop Action settings]
+Name=Settings only
+Exec=nightcap-ac --no-launch

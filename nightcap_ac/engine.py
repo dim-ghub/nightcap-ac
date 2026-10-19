@@ -15,7 +15,7 @@ from .config import Config
 from .hook import ChatTracker, HookListener
 
 # Sent by `nightcap-ac launch` and by a second `nightcap-ac` start.
-APP_COMMANDS = {"show", "offer-restart", "started"}
+APP_COMMANDS = {"show", "offer-restart", "started", "error"}
 
 
 @dataclass
