@@ -2,204 +2,214 @@
 
 Every chat message you send in Roblox (through [Nightcap](https://github.com/CoderDayton/nightcap))
 is spoken into voice chat as Animal Crossing–style Animalese. You can also
-hear it on your own speakers.
+hear it on your own speakers. Settings live in an in-game menu styled like
+Roblox's own.
 
-Nightcap AC is a separate program. It needs no changes to Nightcap: a small
-preload library watches Nightcap's text boxes, and a PipeWire virtual
-microphone carries the voice into Roblox voice chat.
+Nightcap AC is one library, `libnightcap_ac.so`, loaded into an unmodified
+Nightcap. It needs no virtual microphone and no separate app.
 
 ## How it works
 
 ```
- Nightcap (unmodified)                         nightcap-ac
- ┌──────────────────────────────┐   socket    ┌──────────────────────────────┐
- │ libSDL3  ◄── libnightcap_ac_ │ ──────────► │ chat tracker → Animalese     │
- │              hook.so         │  box open/  │ synth → player               │
- │ mic stream ◄──────────┐      │  text/Enter └──────────┬───────────────────┘
- └───────────────────────│──────┘                        │ speech
-                         │        PipeWire               ▼
-                  "Nightcap AC microphone" ◄── nightcap_ac_mix ◄── your real mic
+ Nightcap (unmodified)
+ ┌──────────────────────────────────────────────────────────────────────┐
+ │  libSDL3 ◄─── libnightcap_ac.so (LD_PRELOAD)                         │
+ │                 · chat box text ──► Animalese synth ──┐              │
+ │                 · mic samples   ◄── mixed in ◄────────┤──► speakers  │
+ │  Vulkan  ◄─── same library as a Vulkan layer                         │
+ │                 · in-game menu drawn onto each frame                 │
+ └──────────────────────────────────────────────────────────────────────┘
 ```
 
-* **Chat capture.** `libnightcap_ac_hook.so` is loaded with `LD_PRELOAD`. It
-  wraps a few SDL3 functions Nightcap already calls. When a Roblox text box
-  gets focus, Nightcap calls `SDL_StartTextInputWithProperties`, and the hook
-  then reports typed text and editing keys until the box closes. Pressing
-  Enter sends the message. Nothing is reported while no box is focused, and
-  password boxes are never reported. The hook only observes: every call goes
-  through to SDL unchanged.
-* **Voice chat.** The app creates a virtual mic that mixes your real mic with
-  the speech, then moves *only Nightcap's* recording stream onto it. Discord
-  and other apps keep your normal mic. Quitting the app puts Nightcap back on
-  your real mic and removes the virtual devices.
+* **Chat.** When a Roblox text box gets focus, Nightcap turns on SDL text
+  input. The library follows what you type until Enter sends it. Nothing is
+  read while no box is focused, and password boxes are never read.
+* **Voice chat.** Nightcap reads your microphone with
+  `SDL_GetAudioStreamData`. The library mixes the Animalese voice into those
+  samples, in whatever format and rate the mic stream uses, before Roblox
+  gets them.
+* **Your speakers.** If you choose, the voice also plays on its own SDL
+  playback stream inside Nightcap.
+* **Menu.** The library is also an implicit Vulkan layer. Before each frame
+  is shown, it draws the menu with Dear ImGui in Roblox's style, using
+  Roblox's own font (Builder Sans) and icons (BuilderIcons), loaded from
+  Nightcap's downloaded Roblox files. While the menu is open it gets the mouse and keyboard, and the cursor
+  is freed from first-person mouse lock. Both are handed back when it closes.
 
 ## Requirements
 
-* Linux with PipeWire (`pactl`, `pw-cat`)
-* Python 3.11+ with `numpy` and `PySide6` (`python-numpy`, `pyside6` on Arch)
-* A C compiler and SDL3 headers to build the hook (`sdl3` on Arch)
-* Nightcap, native install (`/usr/bin/mocktail`) or Flatpak
+* Nightcap on Linux, native install (`mocktail` on your PATH). Flatpak is
+  best-effort (see below).
+* Nightcap's Vulkan renderer (the default), not OpenGL
+* To build: a C++17 compiler, SDL3 and Vulkan headers (`sdl3`,
+  `vulkan-headers` on Arch)
+* Optional: `zenity` for the restart question, and `python3` for opening the
+  menu of an already running Nightcap
 
 ## Install
 
 ```bash
 git clone https://github.com/dim-ghub/nightcap-ac
 cd nightcap-ac
-make
+make build
 make install          # into ~/.local (PREFIX=... to change)
 ```
 
-This adds one launcher entry, **Nightcap AC**. It starts Nightcap with the
-hook and opens the settings window (see [What opening it does](#what-opening-nightcap-ac-does)).
-Its **Settings only** action opens just the window.
-
-At the end, `make install` asks whether to patch Nightcap's own launcher:
+`make install` adds a **Nightcap AC** launcher entry and the `nightcap-ac`
+command, then asks:
 
 ```
 Patch it? [y/N]
 ```
 
-Answering **y** writes a copy of Nightcap's `.desktop` entry to
-`~/.local/share/applications/io.github.CoderDayton.nightcap.desktop`, with
-its main command changed to `nightcap-ac launch`. That copy takes priority
-over the system entry, so the normal **Nightcap** launcher and `roblox://`
-links (clicking Join on the website) start Nightcap with the hook. The
-Settings action is unchanged. The copy leaves out Nightcap's
-`X-Mocktail-Managed` marker, so Nightcap's `register_url_handler.sh` won't
-overwrite it. If you already had your own entry at that path, it is backed
-up and restored on removal.
-
-You can manage the patch any time:
+Answering **y** copies Nightcap's own launcher entry to
+`~/.local/share/applications/io.github.CoderDayton.nightcap.desktop`, starting
+Nightcap through Nightcap AC. Then the normal **Nightcap** entry and
+`roblox://` links (clicking Join on the website) load it too. The copy leaves
+out Nightcap's `X-Mocktail-Managed` marker, so Nightcap's
+`register_url_handler.sh` won't overwrite it. Change your mind any time:
 
 ```bash
-nightcap-ac desktop install     # patch (no prompt)
-nightcap-ac desktop remove      # undo
-nightcap-ac desktop status
+make patch-desktop      # add the patch
+make unpatch-desktop    # remove it (an entry you had there before comes back)
 ```
 
-For scripted installs, `NIGHTCAP_AC_DESKTOP=y make install` (or `=n`) answers
-the prompt. Without a terminal the patch is skipped.
-
-To update, run `git pull && make install`. To remove everything, including
-the patch, run `make uninstall`.
-
-To run from the source tree without installing:
-
-```bash
-make
-./scripts/nightcap-ac              # start Nightcap with the hook + settings
-./scripts/nightcap-ac --no-launch  # settings window only
-```
+`NIGHTCAP_AC_DESKTOP=y make install` (or `=n`) answers the question for
+scripted installs. To update, run `git pull && make install`. To remove
+everything, including the patch, run `make uninstall`.
 
 ## Use
 
-1. Open **Nightcap AC** from your app launcher (or run `nightcap-ac`).
+1. Open **Nightcap AC** (or the patched **Nightcap** entry, or run
+   `nightcap-ac`).
 2. Join a game with voice chat and unmute your mic in Roblox.
 3. Chat as usual (`/` or click the chat bar, type, press Enter). The message
    plays in voice chat as Animalese.
+4. Press **F8**, or click the speech-bubble button next to Roblox's top-left
+   buttons, to open the menu. **Esc**, **F8** or **Close** closes it.
+
+The menu follows Roblox's in-experience menu, timed from a 60 fps recording
+of Roblox's own:
+
+* It slides up from below the screen as it opens, and drops away when it
+  closes. Clicking outside it, Esc, F8 or **Close** closes it.
+* Pages slide sideways when you switch tabs, and picker values swipe left
+  or right with the arrow you pressed.
+* It uses Roblox's own font (Builder Sans) and Roblox's own icons
+  (BuilderIcons), both loaded from Nightcap's downloaded Roblox files.
+  Nothing of Roblox's is bundled here.
+* The top-bar button is a solid circle like Roblox's; its icon grows while
+  the menu is open.
+
+It works with the mouse or the keyboard:
+
+| Key | Does |
+| --- | --- |
+| Tab / Shift+Tab, ↑ / ↓ | Select the next / previous setting (white outline, like Roblox's selection) |
+| ← / → | Change the selected setting |
+| Enter / Space | Toggle or activate the selected setting |
+| Q / E | Previous / next page |
+| T / S | Test voice / Stop |
+| Esc or F8 | Close |
 
 ### What opening Nightcap AC does
 
 | Nightcap is... | What happens |
 | --- | --- |
-| not running | Nightcap starts with the hook and the settings window opens |
-| running with the hook | The settings window opens, or comes to the front if it is already open |
-| running **without** the hook | The settings window offers to restart Nightcap with the hook. **Rejoin the same server** puts you back in the server you were in |
+| not running | Nightcap starts with Nightcap AC loaded |
+| running with Nightcap AC | Its in-game menu opens. A clicked `roblox://` link goes to the running Nightcap |
+| running **without** it | A dialog offers **Restart and rejoin** (back into the same server), **Restart only**, or **Not now**. If you clicked a join link, the restart opens that link instead |
 
-If you patched Nightcap's launcher, the normal **Nightcap** entry and
-`roblox://` links (clicking Join on the website) go through
-`nightcap-ac launch`. It works the same way, with one difference: a clicked
-link is passed to a running, hooked Nightcap without popping up the settings
-window, and a restart opens the clicked link instead of rejoining.
+The running Nightcap is found the way Nightcap's own settings window finds
+it: through the process holding its instance lock. The rejoin reads the last
+`Joining game '<server>' place <id>` line from the session log and restarts
+with `--launch-uri roblox://experiences/start?placeId=..&gameInstanceId=..`.
+The restart closes Nightcap with SIGTERM, so it leaves the game cleanly.
 
-Nightcap AC finds the running Nightcap the way Nightcap's own settings window
-does, through the process holding its instance lock. Whether the hook is
-loaded comes from that process's memory map. Rejoining reads the last
-`Joining game '<server>' place <id>` line from that session's log and
-restarts with `--launch-uri roblox://experiences/start?placeId=..&gameInstanceId=..`.
-That is the same approach as Cocktail.
-The restart closes Nightcap with SIGTERM (it leaves the game cleanly) and
-waits up to 20 seconds before forcing it.
+### The menu
 
-Opening `nightcap-ac` again while it is already running just brings its
-window to the front.
-
-### Settings
+**Voice**
 
 | Setting | What it does |
 | --- | --- |
-| **Play the voice to** | *Voice chat only*, *Voice chat and my speakers*, or *My speakers only* (handy for trying voices) |
-| **Personality** | Normal, Peppy, Snooty, Sisterly, Lazy, Jock, Smug, Cranky. Each has its own pitch, speed and timbre |
-| **Game** | *Classic*: one clipped letter sound per letter, like GameCube through New Leaf. *New Horizons*: syllable babble with a sentence melody. *Bebebese*: every letter is "be" |
-| **Pitch / Speed** | Shift the voice up or down by up to 12 semitones; speed from 50 to 200% |
-| **VC / Speaker volume** | Separate levels for voice chat and for your speakers |
-| **Letter samples** | Use your own letter recordings instead of the built-in voice (Classic only, see below) |
-| **Keep my real microphone** | Off: voice chat hears only the Animalese. On: your mic is mixed in too |
-| **Don't speak chat commands** | Skips messages starting with `/` (`/e dance`, `/w name`, ...) |
+| Speak my chat messages | On or Off |
+| Game | *Classic*: one clipped letter sound per letter, like GameCube through New Leaf. *New Horizons*: syllable babble with a sentence melody. *Bebebese*: every letter is "be" |
+| Personality | Normal, Peppy, Snooty, Sisterly, Lazy, Jock, Smug, Cranky |
+| Pitch / Speed | ±12 semitones; 50 to 200% |
+| Test message | Type something and press Enter to hear it |
 
-Settings save to `~/.config/nightcap-ac/config.json` and apply immediately.
+**Output**
+
+| Setting | What it does |
+| --- | --- |
+| Play the voice in | *Voice chat*, *Voice chat + me*, or *Only me* |
+| Voice chat volume / My speakers volume | Separate levels |
+| Keep my microphone on | Off: voice chat hears only the Animalese voice |
+| Status | Whether you're in voice chat right now (Nightcap is reading your mic) |
+
+**Settings**
+
+| Setting | What it does |
+| --- | --- |
+| Skip chat commands | Don't speak `/e dance`, `/w name` and the like |
+| Menu button | Top left (next to Roblox's buttons), top right, or hidden. F8 always works |
+| Letter samples | A folder of `a.wav`…`z.wav`, or one WAV with all 26 letters back to back (the Animalese.js layout), for the exact in-game sound. Classic only, and not included |
+
+Settings are saved to `~/.config/nightcap-ac/config.json`, the same file the
+earlier standalone version used.
 
 ### How it imitates Animal Crossing
 
-* Each letter (Classic) or syllable (New Horizons) becomes a short blip,
-  timed like the text box printing characters.
-* Every blip gets a random pitch around the speaker's voice, so the same
-  text never sounds exactly the same twice.
+* Each letter (Classic) or syllable (New Horizons) is a short blip, timed
+  like the text box printing characters.
+* Every blip gets a random pitch around the speaker's voice.
 * `?` makes the last word climb and bend upward. `!` raises and boosts the
   sentence. ALL-CAPS words are shouted.
 * Commas, periods and `...` add the matching pauses. Numbers and symbols are
-  read out (`3` becomes "three", `&` becomes "and"). Emoji are silent.
-* The built-in voices are synthesized: a harmonic voice through vocal-tract
-  formants, with noise bursts for consonants. No game audio is included.
-
-### Letter sample packs
-
-For the exact in-game sound, point **Letter samples** at either:
-
-* a folder with `a.wav` ... `z.wav`, or
-* a single WAV with all 26 letters back to back in equal slices (the
-  Animalese.js sound-sprite layout).
-
-Each letter plays its sample's start, resampled for pitch, the way the games
-play their voice banks. Packs are not included; use recordings you have the
-rights to.
-
-### Command line
-
-```bash
-nightcap-ac --headless                          # no window
-nightcap-ac say "Hello there!" --style nh       # try a voice on your speakers
-nightcap-ac say "Hi!" --voice cranky --wav hi.wav
-nightcap-ac launch --flatpak                    # force the Flatpak build
-```
-
-## Flatpak Nightcap
-
-`nightcap-ac launch` uses the Flatpak when there is no native `mocktail`.
-It passes the hook, the socket folder and `LD_PRELOAD` through
-`flatpak run` options, so no permanent overrides are added.
+  read out. Emoji are silent.
+* The voices are synthesized: a harmonic voice through vocal-tract formants,
+  with noise bursts for consonants. No game audio is included.
 
 ## Limitations
 
-* The hook can't tell the chat bar from a game's own single-line text box,
-  so text sent with Enter from any text box is spoken. Password boxes are
-  always skipped.
-* Roblox's voice processing (noise suppression, auto-gain) still applies, so
-  very quiet volumes may be cut.
-* If the app crashes, the virtual devices are cleaned up the next time it
-  starts. To remove them by hand:
-  `pactl list modules short | grep nightcap_ac`, then `pactl unload-module <id>`.
+* **VR:** the menu isn't visible inside the headset, because Nightcap sends
+  VR frames through OpenXR. Speech still works. Use F8 on the desktop window.
+* **OpenGL:** with Nightcap's OpenGL renderer, speech works but there's no
+  menu. Edit `config.json` instead.
+* **Menu button position:** the button sits where Roblox's top-left buttons
+  normally end. If a game's top bar is wider, move it to the top right or
+  hide it under Settings and use F8.
+* **Other text boxes:** the library can't tell the chat bar from a game's
+  own single-line text box, so text sent with Enter from any text box is
+  spoken. Games with their own in-world keyboard (like VR Hands) don't go
+  through a text box, so their messages aren't spoken.
+* **Flatpak:** the launcher passes the library and layer into the sandbox,
+  but the library is built against your system's libraries, which may be
+  newer than the Flatpak runtime's.
 
 ## Development
 
 ```bash
-make test     # builds the hook, then runs the unit and hook tests
+make build    # the library and build/nightcap-ac-render
+make test     # also builds the stand-ins below
 ```
 
-`tests/hook_driver.c` is a small SDL3 program that drives the preload hook
-the way Nightcap does. The tests check that keystrokes are reported exactly
-once, that nothing leaks outside a focused box, and that password text stays
-private.
+The tests load the library into stand-ins for Nightcap:
+
+* `tests/vk_driver.cc`: an SDL3 + Vulkan program. The tests open the menu,
+  click, press F8, and check saved frames (`NIGHTCAP_AC_DUMP=/path.ppm` saves
+  one composited frame).
+* `tests/mic_driver.cc`: opens the microphone the way Nightcap does, using
+  SDL's file-backed `disk` audio driver, and sends a chat message. The tests
+  check the speech lands in the mic stream.
+* `tests/chat_test.cc`: chat-box tracking.
+* `tests/test_synth.py`: the synthesizer.
+* `tests/test_launcher.py`: the launcher's pieces.
+
+`build/nightcap-ac-render OUT.wav "text" [voice] [style] [pitch] [speed]`
+renders the voice to a file.
+
+Dear ImGui (MIT) is vendored in `third_party/imgui`.
 
 ## License
 

@@ -1,12 +1,236 @@
-#!/bin/sh
-# Runs nightcap-ac from a source checkout or from `make install`.
-here="$(dirname "$(readlink -f "$0")")"
-for dir in "$here/../share/nightcap-ac" "$here/.."; do
-  if [ -d "$dir/nightcap_ac" ]; then
-    PYTHONPATH="$(readlink -f "$dir")${PYTHONPATH:+:$PYTHONPATH}"
-    export PYTHONPATH
-    exec python3 -m nightcap_ac "$@"
+#!/usr/bin/env bash
+# Nightcap AC launcher.
+#
+#   nightcap-ac [NIGHTCAP ARGS]          start Nightcap with Nightcap AC loaded
+#
+# (Installing, and patching Nightcap's launcher entry, is done by make:
+# see the Makefile's install and patch-desktop targets.)
+#
+# Starting it checks what is running first:
+#   * Nightcap not running: start it with Nightcap AC.
+#   * Running with Nightcap AC: open the in-game menu (or hand a clicked
+#     roblox:// link to it).
+#   * Running without it: offer to restart it with Nightcap AC, optionally
+#     rejoining the same server.
+#
+# Nightcap AC itself is one library, libnightcap_ac.so: preloaded for its SDL
+# hooks and named in a Vulkan layer manifest for the in-game menu.
+
+set -u
+
+FLATPAK_ID=io.github.CoderDayton.nightcap
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/nightcap-ac"
+
+self="$(readlink -f "$0")"
+here="$(dirname "$self")"
+
+note() { printf 'nightcap-ac: %s\n' "$*" >&2; }
+
+find_lib() {
+  local candidate
+  for candidate in "${NIGHTCAP_AC_LIB:-}" \
+      "$here/../lib/nightcap-ac/libnightcap_ac.so" \
+      "$here/../build/libnightcap_ac.so" \
+      "$HOME/.local/lib/nightcap-ac/libnightcap_ac.so" \
+      /usr/lib/nightcap-ac/libnightcap_ac.so; do
+    if [[ -n "$candidate" && -f "$candidate" ]]; then
+      readlink -f "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Writes the Vulkan layer manifest pointing at this exact library path (the
+# loader then reuses the preloaded copy) and prints its directory.
+layer_dir() {
+  local lib="$1" template dir="$RUNTIME_DIR/layer"
+  for template in "$here/../share/nightcap-ac/nightcap_ac_layer.json.in" \
+      "$here/../packaging/nightcap_ac_layer.json.in"; do
+    [[ -f "$template" ]] && break
+  done
+  mkdir -p "$dir" && chmod 700 "$RUNTIME_DIR"
+  sed "s|@LIB@|$lib|" "$template" > "$dir/nightcap_ac_layer.json"
+  printf '%s\n' "$dir"
+}
+
+# --- finding a running Nightcap ------------------------------------------------
+
+# Nightcap holds an flock on its instance lock while running; the holder is
+# the Nightcap process (this is how Nightcap's own settings window finds it).
+lock_holders() {
+  local lock major minor ino
+  for lock in "/run/user/$(id -u)"/mocktail.*.instance.lock /tmp/mocktail-"$(id -u)".*.instance.lock; do
+    [[ -e "$lock" ]] || continue
+    read -r major minor ino < <(stat -c '%Hd %Ld %i' "$lock")
+    awk -v want="$(printf '%02x:%02x:%s' "$major" "$minor" "$ino")" \
+      '$2 == "FLOCK" && $6 == want { print $5 }' /proc/locks
+  done
+}
+
+exe_name() { basename "$(readlink "/proc/$1/exe" 2>/dev/null)" 2>/dev/null; }
+
+find_nightcap() {
+  local pid
+  for pid in $(lock_holders); do
+    case "$(exe_name "$pid")" in mocktail|nightcap) echo "$pid"; return 0 ;; esac
+  done
+  # Flatpak keeps its /run/user private: fall back to the mocktail process
+  # that has SDL3 loaded (the game window, not a helper).
+  for pid in $(pgrep -x mocktail; pgrep -x nightcap); do
+    if grep -q libSDL3 "/proc/$pid/maps" 2>/dev/null; then echo "$pid"; return 0; fi
+  done
+  return 1
+}
+
+is_hooked() { grep -q libnightcap_ac.so "/proc/$1/maps" 2>/dev/null; }
+
+# The server this Nightcap is in, as a roblox:// link (empty when not in one):
+# the last "Joining game" in its session log, unless a leave came after it.
+current_game_uri() {
+  local log="${XDG_STATE_HOME:-$HOME/.local/state}/mocktail/logs/latest.log"
+  [[ -e "$log" ]] || return 0
+  awk '
+    /Joining game \x27/ {
+      if (match($0, /Joining game \x27[0-9a-fA-F-]+\x27 place [0-9]+/)) {
+        s = substr($0, RSTART, RLENGTH)
+        split(s, p, "\x27"); server = p[2]
+        sub(/.* place /, "", s); place = s
+      }
+    }
+    /onGameLeaveBegin\(\)/ { server = ""; place = "" }
+    END { if (server != "") printf "roblox://experiences/start?placeId=%s&gameInstanceId=%s\n", place, server }
+  ' "$log"
+}
+
+link_in_args() {
+  local prev="" arg
+  for arg in "$@"; do
+    [[ "$prev" == --launch-uri ]] && { echo "$arg"; return 0; }
+    case "$arg" in roblox:*|roblox-player:*) echo "$arg"; return 0 ;; esac
+    prev="$arg"
+  done
+  return 1
+}
+
+stop_nightcap() {
+  local pid="$1" i
+  # Nightcap leaves the game cleanly on SIGTERM.
+  kill -TERM "$pid" 2>/dev/null || return 0
+  for ((i = 0; i < 200; i++)); do
+    [[ -d "/proc/$pid" ]] || return 0
+    sleep 0.1
+  done
+  kill -KILL "$pid" 2>/dev/null
+  sleep 0.5
+}
+
+# --- asking -------------------------------------------------------------------
+
+# Prints the chosen action: rejoin, restart or cancel.
+ask_restart() {
+  local game="$1" link="$2" text answer status
+  text="Nightcap is already running without Nightcap AC. Restart it so your chat is spoken in voice chat?"
+  if command -v zenity >/dev/null; then
+    if [[ -n "$link" ]]; then
+      zenity --question --title="Nightcap AC" --text="$text\n\nIt will open the game you clicked." \
+        --ok-label="Restart" --cancel-label="Not now" 2>/dev/null && echo restart || echo cancel
+      return
+    fi
+    if [[ -n "$game" ]]; then
+      answer=$(zenity --question --title="Nightcap AC" --text="$text" \
+        --ok-label="Restart and rejoin" --extra-button="Restart only" --cancel-label="Not now" 2>/dev/null)
+      status=$?
+      if [[ $status -eq 0 ]]; then echo rejoin
+      elif [[ "$answer" == "Restart only" ]]; then echo restart
+      else echo cancel
+      fi
+      return
+    fi
+    zenity --question --title="Nightcap AC" --text="$text" \
+      --ok-label="Restart" --cancel-label="Not now" 2>/dev/null && echo restart || echo cancel
+    return
   fi
-done
-echo "nightcap-ac: package not found next to $0" >&2
-exit 1
+  if [[ -t 0 ]]; then
+    printf '%s\n' "$text" >&2
+    if [[ -n "$game" && -z "$link" ]]; then
+      read -r -p "Restart and rejoin the same server? [Y/n/r = restart only] " answer
+      case "${answer,,}" in ""|y|yes) echo rejoin ;; r) echo restart ;; *) echo cancel ;; esac
+    else
+      read -r -p "Restart? [Y/n] " answer
+      case "${answer,,}" in ""|y|yes) echo restart ;; *) echo cancel ;; esac
+    fi
+    return
+  fi
+  note "Nightcap is running without Nightcap AC; close it and start it again"
+  echo cancel
+}
+
+# --- starting -----------------------------------------------------------------
+
+exec_nightcap() {
+  local lib layer native
+  lib=$(find_lib) || { note "libnightcap_ac.so not found; run 'make install'"; exit 1; }
+  layer=$(layer_dir "$lib")
+  native=$(command -v mocktail || true)
+  if [[ -n "$native" ]]; then
+    exec env LD_PRELOAD="$lib${LD_PRELOAD:+:$LD_PRELOAD}" \
+      VK_ADD_IMPLICIT_LAYER_PATH="$layer${VK_ADD_IMPLICIT_LAYER_PATH:+:$VK_ADD_IMPLICIT_LAYER_PATH}" \
+      NIGHTCAP_AC_LAYER=1 SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-wayland,x11}" \
+      "$native" "$@"
+  fi
+  if command -v flatpak >/dev/null && flatpak info "$FLATPAK_ID" >/dev/null 2>&1; then
+    exec flatpak run --filesystem="$(dirname "$lib")":ro --filesystem="$RUNTIME_DIR" \
+      --env=LD_PRELOAD="$lib" --env=VK_ADD_IMPLICIT_LAYER_PATH="$layer" --env=NIGHTCAP_AC_LAYER=1 \
+      "$FLATPAK_ID" "$@"
+  fi
+  note "Nightcap is not installed"
+  exit 1
+}
+
+launch() {
+  local pid game link choice
+  if ! pid=$(find_nightcap); then
+    exec_nightcap "$@"
+  fi
+  link=$(link_in_args "$@" || true)
+  if is_hooked "$pid"; then
+    if [[ -n "$link" ]]; then
+      # Nightcap is single-instance: a second start hands the link over.
+      exec "$(command -v mocktail || echo mocktail)" "$@"
+    fi
+    # Open the in-game menu of the running Nightcap.
+    if command -v python3 >/dev/null; then
+      python3 -I -c 'import socket,sys; s=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM); s.sendto(b"open",sys.argv[1])' \
+        "$RUNTIME_DIR/control-$pid.sock" 2>/dev/null || note "press F8 in Nightcap to open Nightcap AC"
+    else
+      note "Nightcap AC is already running; press F8 in Nightcap"
+    fi
+    exit 0
+  fi
+  game=""
+  [[ -z "$link" ]] && game=$(current_game_uri)
+  choice=$(ask_restart "$game" "$link")
+  case "$choice" in
+    rejoin) stop_nightcap "$pid"; exec_nightcap --launch-uri "$game" "$@" ;;
+    restart) stop_nightcap "$pid"; exec_nightcap "$@" ;;
+    *) exit 0 ;;
+  esac
+}
+
+# Tests source this file for its functions.
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then return 0; fi
+
+case "${1:-}" in
+  launch)
+    # Older launcher entries ran "nightcap-ac launch %u".
+    shift
+    launch "$@"
+    ;;
+  -h|--help)
+    sed -n '2,17p' "$self" | sed 's/^# \{0,1\}//'
+    ;;
+  *)
+    launch "$@"
+    ;;
+esac

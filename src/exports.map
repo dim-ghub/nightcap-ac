@@ -1,0 +1,8 @@
+/* Only the SDL wrappers and the Vulkan layer entry point are visible. */
+{
+  global:
+    SDL_*;
+    vkNegotiateLoaderLayerInterfaceVersion;
+  local:
+    *;
+};
