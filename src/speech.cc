@@ -13,6 +13,7 @@
 
 #include "app.h"
 #include "synth.h"
+#include "tts.h"
 
 namespace nac {
 namespace {
@@ -80,11 +81,6 @@ SDL_AudioStream* OpenLocal() {
 void Play(const std::string& text) {
   Engine& e = E();
   const Config cfg = GetConfig();
-  VoiceSettings vs;
-  vs.voice = cfg.voice;
-  vs.style = cfg.style;
-  vs.pitch = cfg.pitch;
-  vs.speed = cfg.speed;
   const SamplePack* pack = nullptr;
   if (!cfg.sample_pack.empty() && cfg.style == "classic") {
     if (cfg.sample_pack != e.pack_path) {
@@ -94,7 +90,7 @@ void Play(const std::string& text) {
     }
     if (!e.pack.empty()) pack = &e.pack;
   }
-  const std::vector<float> audio = Synthesize(text, vs, std::random_device{}(), pack);
+  const std::vector<float> audio = SynthesizeSpeech(text, cfg, pack);
   if (audio.empty()) return;
   const int64_t duration_ms = static_cast<int64_t>(audio.size()) * 1000 / kSampleRate;
 

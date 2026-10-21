@@ -67,7 +67,7 @@ void Log(const char* fmt, ...) {
   va_start(args, fmt);
   std::vsnprintf(buf, sizeof(buf), fmt, args);
   va_end(args);
-  std::fprintf(stderr, "  [nightcap-ac] %s\n", buf);
+  std::fprintf(stderr, "  [vox-tts] %s\n", buf);
 }
 
 }  // namespace nac

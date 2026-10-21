@@ -1,8 +1,8 @@
 // State shared between the SDL side (main thread: events, cursor) and the
 // Vulkan layer (present thread: drawing the menu).
 
-#ifndef NIGHTCAP_AC_OVERLAY_H_
-#define NIGHTCAP_AC_OVERLAY_H_
+#ifndef VOX_TTS_OVERLAY_H_
+#define VOX_TTS_OVERLAY_H_
 
 #include <SDL3/SDL.h>
 
@@ -56,4 +56,4 @@ bool ButtonRect(int window_w, float* x, float* y, float* size);
 
 }  // namespace nac::overlay
 
-#endif  // NIGHTCAP_AC_OVERLAY_H_
+#endif  // VOX_TTS_OVERLAY_H_

@@ -13,8 +13,8 @@
 // The sounds are synthesized (harmonic voice source shaped by formant
 // resonances, plus filtered noise for consonants); no game audio is used.
 
-#ifndef NIGHTCAP_AC_SYNTH_H_
-#define NIGHTCAP_AC_SYNTH_H_
+#ifndef VOX_TTS_SYNTH_H_
+#define VOX_TTS_SYNTH_H_
 
 #include <cstdint>
 #include <map>
@@ -78,4 +78,4 @@ std::vector<float> Synthesize(const std::string& utf8,
 
 }  // namespace nac
 
-#endif  // NIGHTCAP_AC_SYNTH_H_
+#endif  // VOX_TTS_SYNTH_H_

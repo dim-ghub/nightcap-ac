@@ -1,8 +1,8 @@
 // Process-wide state shared by the SDL hooks, the speech engine and the
 // in-game menu.
 
-#ifndef NIGHTCAP_AC_APP_H_
-#define NIGHTCAP_AC_APP_H_
+#ifndef VOX_TTS_APP_H_
+#define VOX_TTS_APP_H_
 
 #include <dlfcn.h>
 
@@ -31,4 +31,4 @@ Fn Real(const char* name) {
 
 }  // namespace nac
 
-#endif  // NIGHTCAP_AC_APP_H_
+#endif  // VOX_TTS_APP_H_

@@ -1,215 +1,153 @@
-# Nightcap AC
+# Vox TTS
 
 Every chat message you send in Roblox (through [Nightcap](https://github.com/CoderDayton/nightcap))
-is spoken into voice chat as Animal Crossing–style Animalese. You can also
+is synthesized into voice chat using fast, local Text-to-Speech (TTS). You can also
 hear it on your own speakers. Settings live in an in-game menu styled like
 Roblox's own.
 
-Nightcap AC is one library, `libnightcap_ac.so`, loaded into an unmodified
-Nightcap. It needs no virtual microphone and no separate app.
-
-## How it works
+Vox TTS (formerly Nightcap AC) is one library, `libvox_tts.so`, loaded into an unmodified
+Nightcap. It requires no virtual audio cables, no virtual microphone, and no separate app.
 
 ```
  Nightcap (unmodified)
  ┌──────────────────────────────────────────────────────────────────────┐
- │  libSDL3 ◄─── libnightcap_ac.so (LD_PRELOAD)                         │
- │                 · chat box text ──► Animalese synth ──┐              │
- │                 · mic samples   ◄── mixed in ◄────────┤──► speakers  │
+ │  libSDL3 ◄─── libvox_tts.so (LD_PRELOAD)                             │
+ │                 · chat box text ──► TTS engines (Piper / eSpeak / AC) ─┤ │
+ │                 · mic samples   ◄── mixed in ◄─────────────────────┤ │
+ │                                                                    ▼ │
+ │                                                                speakers
  │  Vulkan  ◄─── same library as a Vulkan layer                         │
  │                 · in-game menu drawn onto each frame                 │
  └──────────────────────────────────────────────────────────────────────┘
 ```
 
-* **Chat.** When a Roblox text box gets focus, Nightcap turns on SDL text
-  input. The library follows what you type until Enter sends it. Nothing is
-  read while no box is focused, and password boxes are never read.
-* **Voice chat.** Nightcap reads your microphone with
-  `SDL_GetAudioStreamData`. The library mixes the Animalese voice into those
-  samples, in whatever format and rate the mic stream uses, before Roblox
-  gets them.
-* **Your speakers.** If you choose, the voice also plays on its own SDL
-  playback stream inside Nightcap.
-* **Menu.** The library is also an implicit Vulkan layer. Before each frame
-  is shown, it draws the menu with Dear ImGui in Roblox's style, using
-  Roblox's own font (Builder Sans) and icons (BuilderIcons), loaded from
-  Nightcap's downloaded Roblox files. While the menu is open it gets the mouse and keyboard, and the cursor
-  is freed from first-person mouse lock. Both are handed back when it closes.
+## Features
+
+* **Local Text-to-Speech Engines:**
+  * **Piper TTS (Neural AI):** High-quality, natural offline AI voices (Lessac, Amy, Ryan, etc.) running locally with ONNX models. Fast, low latency, and realistic.
+  * **eSpeak-NG (Retro / Lightweight):** Fast, classic synthesized speech with support for many accents and languages (US English, British, Scottish, Spanish, French, German, Japanese, etc.), pitch, and WPM speed adjustments.
+  * **Animal Crossing (Animalese):** Turn your chat into Animalese blips!
+    * Choose between *Classic* (GC / WW / CF / NL), *New Horizons* (syllable babble with sentence melody), or *Bebebese*.
+    * Select villager personalities (Normal, Peppy, Snooty, Sisterly, Lazy, Jock, Smug, Cranky).
+    * Load custom letter sound packs (`a.wav`...`z.wav`).
+* **In-Game Roblox Overlay:**
+  * Press **F8** (or click the top bar button) to open the 3-tab in-game menu: **TTS**, **Output**, and **Settings**.
+  * Styled after Roblox's own settings menu, using Roblox's own Builder Sans font and BuilderIcons.
+* **Audio Routing:**
+  * Play voice directly into voice chat, to your speakers only, or both.
+  * Adjust voice chat volume and local speaker volume independently.
+  * Optional "Keep My Microphone On" to mix synthetic speech over your real voice.
 
 ## Requirements
 
-* Nightcap on Linux, native install (`mocktail` on your PATH). Flatpak is
-  best-effort (see below).
-* Nightcap's Vulkan renderer (the default), not OpenGL
-* To build: a C++17 compiler, SDL3 and Vulkan headers (`sdl3`,
-  `vulkan-headers` on Arch)
-* Optional: `zenity` for the restart question, and `python3` for opening the
-  menu of an already running Nightcap
+* Nightcap on Linux, native install (`mocktail` on your PATH). Flatpak is best-effort.
+* Nightcap's Vulkan renderer (the default), not OpenGL.
+* Local TTS engines:
+  * `espeak-ng` (commonly installed on most Linux distributions)
+  * `piper` (optional, for neural AI voices)
+* To build: C++17 compiler, SDL3, and Vulkan headers (`sdl3`, `vulkan-headers` on Arch/Artix).
 
 ## Install
 
 ```bash
-git clone https://github.com/dim-ghub/nightcap-ac
-cd nightcap-ac
+git clone https://github.com/dim-ghub/nightcap-ac vox-tts
+cd vox-tts
 make build
 make install          # into ~/.local (PREFIX=... to change)
 ```
 
-`make install` adds a **Nightcap AC** launcher entry and the `nightcap-ac`
-command, then asks:
+`make install` installs:
+* `vox-tts` (and backwards-compatible `nightcap-ac` alias)
+* `libvox_tts.so` (and `libnightcap_ac.so` symlink)
+* `vox-tts-download-voice` helper script
+* Desktop launcher entries and Vulkan layer manifests
 
+It will then prompt:
 ```
 Patch it? [y/N]
 ```
+Answering **y** updates Nightcap's launcher entry so normal launches and `roblox://` links (joining games from the website) launch with Vox TTS automatically.
 
-Answering **y** copies Nightcap's own launcher entry to
-`~/.local/share/applications/io.github.CoderDayton.nightcap.desktop`, starting
-Nightcap through Nightcap AC. Then the normal **Nightcap** entry and
-`roblox://` links (clicking Join on the website) load it too. The copy leaves
-out Nightcap's `X-Mocktail-Managed` marker, so Nightcap's
-`register_url_handler.sh` won't overwrite it. Change your mind any time:
-
+To remove or undo anytime:
 ```bash
-make patch-desktop      # add the patch
-make unpatch-desktop    # remove it (an entry you had there before comes back)
+make unpatch-desktop    # restore previous desktop entry
+make uninstall          # remove all installed files
 ```
 
-`NIGHTCAP_AC_DESKTOP=y make install` (or `=n`) answers the question for
-scripted installs. To update, run `git pull && make install`. To remove
-everything, including the patch, run `make uninstall`.
+## Downloading Neural Piper Voices
 
-## Use
-
-1. Open **Nightcap AC** (or the patched **Nightcap** entry, or run
-   `nightcap-ac`).
-2. Join a game with voice chat and unmute your mic in Roblox.
-3. Chat as usual (`/` or click the chat bar, type, press Enter). The message
-   plays in voice chat as Animalese.
-4. Press **F8**, or click the speech-bubble button next to Roblox's top-left
-   buttons, to open the menu. **Esc**, **F8** or **Close** closes it.
-
-The menu follows Roblox's in-experience menu, timed from a 60 fps recording
-of Roblox's own:
-
-* It slides up from below the screen as it opens, and drops away when it
-  closes. Clicking outside it, Esc, F8 or **Close** closes it.
-* Pages slide sideways when you switch tabs, and picker values swipe left
-  or right with the arrow you pressed.
-* It uses Roblox's own font (Builder Sans) and Roblox's own icons
-  (BuilderIcons), both loaded from Nightcap's downloaded Roblox files.
-  Nothing of Roblox's is bundled here.
-* The top-bar button is a solid circle like Roblox's; its icon grows while
-  the menu is open.
-
-It works with the mouse or the keyboard:
-
-| Key | Does |
-| --- | --- |
-| Tab / Shift+Tab, ↑ / ↓ | Select the next / previous setting (white outline, like Roblox's selection) |
-| ← / → | Change the selected setting |
-| Enter / Space | Toggle or activate the selected setting |
-| Q / E | Previous / next page |
-| T / S | Test voice / Stop |
-| Esc or F8 | Close |
-
-### What opening Nightcap AC does
-
-| Nightcap is... | What happens |
-| --- | --- |
-| not running | Nightcap starts with Nightcap AC loaded |
-| running with Nightcap AC | Its in-game menu opens. A clicked `roblox://` link goes to the running Nightcap |
-| running **without** it | A dialog offers **Restart and rejoin** (back into the same server), **Restart only**, or **Not now**. If you clicked a join link, the restart opens that link instead |
-
-The running Nightcap is found the way Nightcap's own settings window finds
-it: through the process holding its instance lock. The rejoin reads the last
-`Joining game '<server>' place <id>` line from the session log and restarts
-with `--launch-uri roblox://experiences/start?placeId=..&gameInstanceId=..`.
-The restart closes Nightcap with SIGTERM, so it leaves the game cleanly.
-
-### The menu
-
-**Voice**
-
-| Setting | What it does |
-| --- | --- |
-| Speak my chat messages | On or Off |
-| Game | *Classic*: one clipped letter sound per letter, like GameCube through New Leaf. *New Horizons*: syllable babble with a sentence melody. *Bebebese*: every letter is "be" |
-| Personality | Normal, Peppy, Snooty, Sisterly, Lazy, Jock, Smug, Cranky |
-| Pitch / Speed | ±12 semitones; 50 to 200% |
-| Test message | Type something and press Enter to hear it |
-
-**Output**
-
-| Setting | What it does |
-| --- | --- |
-| Play the voice in | *Voice chat*, *Voice chat + me*, or *Only me* |
-| Voice chat volume / My speakers volume | Separate levels |
-| Keep my microphone on | Off: voice chat hears only the Animalese voice |
-| Status | Whether you're in voice chat right now (Nightcap is reading your mic) |
-
-**Settings**
-
-| Setting | What it does |
-| --- | --- |
-| Skip chat commands | Don't speak `/e dance`, `/w name` and the like |
-| Menu button | Top left (next to Roblox's buttons), top right, or hidden. F8 always works |
-| Letter samples | A folder of `a.wav`…`z.wav`, or one WAV with all 26 letters back to back (the Animalese.js layout), for the exact in-game sound. Classic only, and not included |
-
-Settings are saved to `~/.config/nightcap-ac/config.json`, the same file the
-earlier standalone version used.
-
-### How it imitates Animal Crossing
-
-* Each letter (Classic) or syllable (New Horizons) is a short blip, timed
-  like the text box printing characters.
-* Every blip gets a random pitch around the speaker's voice.
-* `?` makes the last word climb and bend upward. `!` raises and boosts the
-  sentence. ALL-CAPS words are shouted.
-* Commas, periods and `...` add the matching pauses. Numbers and symbols are
-  read out. Emoji are silent.
-* The voices are synthesized: a harmonic voice through vocal-tract formants,
-  with noise bursts for consonants. No game audio is included.
-
-## Limitations
-
-* **VR:** the menu isn't visible inside the headset, because Nightcap sends
-  VR frames through OpenXR. Speech still works. Use F8 on the desktop window.
-* **OpenGL:** with Nightcap's OpenGL renderer, speech works but there's no
-  menu. Edit `config.json` instead.
-* **Menu button position:** the button sits where Roblox's top-left buttons
-  normally end. If a game's top bar is wider, move it to the top right or
-  hide it under Settings and use F8.
-* **Other text boxes:** the library can't tell the chat bar from a game's
-  own single-line text box, so text sent with Enter from any text box is
-  spoken. Games with their own in-world keyboard (like VR Hands) don't go
-  through a text box, so their messages aren't spoken.
-* **Flatpak:** the launcher passes the library and layer into the sandbox,
-  but the library is built against your system's libraries, which may be
-  newer than the Flatpak runtime's.
-
-## Development
+Vox TTS includes a helper script to download Piper neural voice models directly from Hugging Face into `~/.local/share/piper-voices`:
 
 ```bash
-make build    # the library and build/nightcap-ac-render
-make test     # also builds the stand-ins below
+# Download default voice (en_US-lessac-medium)
+vox-tts-download-voice
+
+# Or download other voices:
+vox-tts-download-voice en_US-amy-medium
+vox-tts-download-voice en_US-ryan-medium
 ```
 
-The tests load the library into stand-ins for Nightcap:
+Any `.onnx` models placed in `~/.local/share/piper-voices` (or configured via a custom directory in Settings) appear in the in-game model picker.
 
-* `tests/vk_driver.cc`: an SDL3 + Vulkan program. The tests open the menu,
-  click, press F8, and check saved frames (`NIGHTCAP_AC_DUMP=/path.ppm` saves
-  one composited frame).
-* `tests/mic_driver.cc`: opens the microphone the way Nightcap does, using
-  SDL's file-backed `disk` audio driver, and sends a chat message. The tests
-  check the speech lands in the mic stream.
-* `tests/chat_test.cc`: chat-box tracking.
-* `tests/test_synth.py`: the synthesizer.
-* `tests/test_launcher.py`: the launcher's pieces.
+## In-Game Controls & Menu
 
-`build/nightcap-ac-render OUT.wav "text" [voice] [style] [pitch] [speed]`
-renders the voice to a file.
+Press **F8** or click the top-bar button to open the menu.
 
-Dear ImGui (MIT) is vendored in `third_party/imgui`.
+### Navigation
+
+| Key | Action |
+| --- | --- |
+| Tab / Shift+Tab, ↑ / ↓ | Select next / previous option |
+| ← / → | Adjust value or switch option |
+| Enter / Space | Toggle or activate setting |
+| Q / E | Switch between menu tabs |
+| Esc or F8 | Close menu |
+
+### Menu Tabs
+
+1. **TTS (Text-to-Speech):**
+   * **Speak My Chat Messages:** Master toggle for speaking chat.
+   * **Speech Engine:** Choose between `Piper (Neural)`, `eSpeak-NG`, or `Animal Crossing`.
+   * **Active Engine Settings:** Each engine only displays its own controls when active:
+     * *Piper*: Voice model picker, custom model file path, speed multiplier, binary status.
+     * *eSpeak-NG*: Voice/accent picker, speed (WPM), pitch slider.
+     * *Animal Crossing*: Game style (Classic, NH, Bebebese), villager personality, pitch, speed, and letter samples pack.
+   * **Test Message:** Type any message and press Enter to test speech immediately.
+2. **Output:**
+   * **Play Voice In:** Voice Chat, Voice Chat + Me, or Only Me.
+   * **Voice Chat / Local Volume:** Independent sliders.
+   * **Keep Microphone On:** Allow speaking through real mic alongside synthetic speech.
+   * **Voice Chat Status:** Live indicator showing if Roblox is currently capturing audio.
+3. **Settings:**
+   * **Skip Chat Commands:** Automatically ignore commands starting with `/` (e.g. `/e dance`).
+   * **Menu Button Position:** Top Left, Top Right, or Hidden.
+   * **Custom Piper Voices Folder:** Additional directory to scan for `.onnx` models.
+   * **About:** Version info and status of the last message spoken.
+
+## Configuration & Migration
+
+Settings are stored at:
+`~/.config/vox-tts/config.json`
+
+If an existing configuration from `~/.config/nightcap-ac/config.json` is detected, it is automatically migrated on first run while preserving all your existing settings.
+
+## Documentation
+
+Detailed documentation is available in the [`docs/`](docs/) directory:
+
+* [Architecture & Internals](docs/architecture.md): How SDL3 hooking, keystroke tracking, microphone injection, and Vulkan overlay rendering work under the hood.
+* [Speech Engines Guide](docs/engines.md): Guide to Piper neural models, eSpeak-NG accents, and the custom Animalese speech synthesizer.
+* [Configuration Reference](docs/configuration.md): Complete schema documentation for `config.json`, audio routing modes, and migration details.
+* [Development & Testing Guide](docs/development.md): Build targets, test harness structure, and debugging environment variables.
+
+## Development & Testing
+
+```bash
+make build   # builds library and render tool
+make test    # runs unit and integration tests
+```
+
+Tests use stand-ins for Nightcap (`vk_driver`, `mic_driver`) to test Vulkan overlay rendering, input events, mic mixing, audio formats, and engine execution.
 
 ## License
 

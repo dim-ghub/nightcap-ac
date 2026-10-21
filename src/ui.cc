@@ -19,6 +19,7 @@
 #include "icons.h"
 #include "speech.h"
 #include "synth.h"
+#include "tts.h"
 
 // Layout and colours follow Roblox's in-experience menu (Settings page),
 // measured from screenshots: a black, slightly see-through panel; flat rows
@@ -540,6 +541,10 @@ int g_tab = 0;
 char g_test[256] = "Hey there! How's it going?";
 char g_pack[512] = "";
 bool g_pack_loaded = false;
+char g_piper_model[512] = "";
+bool g_piper_model_loaded = false;
+char g_piper_dir[512] = "";
+bool g_piper_dir_loaded = false;
 
 template <typename T, typename F>
 std::vector<std::string> Labels(const std::vector<T>& items, F label) {
@@ -553,40 +558,125 @@ int IndexOf(const std::vector<std::string>& keys, const std::string& key) {
   return it == keys.end() ? 0 : static_cast<int>(it - keys.begin());
 }
 
-void VoicePage(Config& cfg) {
-  Header("Animalese Chat", true);
-  Row row = BeginRow("Speak My Chat Messages", "Every message you send plays as Animalese");
+void TTSPage(Config& cfg) {
+  Header("Text-to-Speech", true);
+  Row row = BeginRow("Speak My Chat Messages", "Read chat aloud in Roblox voice chat and/or speakers");
   Switch(row, &cfg.enabled);
   EndRow(row);
 
-  const auto style_keys = Labels(Styles(), [](const StyleInfo& s) { return std::string(s.key); });
-  int style = IndexOf(style_keys, cfg.style);
-  row = BeginRow("Game", "Which Animal Crossing the voice copies");
-  Picker(row, Labels(Styles(), [](const StyleInfo& s) { return std::string(s.label); }), &style);
-  cfg.style = style_keys[style];
+  const std::vector<std::string> engines = {"piper", "espeak", "animalese"};
+  int engine_idx = IndexOf(engines, cfg.engine);
+  row = BeginRow("Speech Engine", "Select your local TTS backend");
+  Picker(row, {"Piper (Neural)", "eSpeak-NG", "Animal Crossing"}, &engine_idx);
+  cfg.engine = engines[engine_idx];
   EndRow(row);
 
-  const auto voice_keys = Labels(Voices(), [](const VoiceInfo& v) { return std::string(v.key); });
-  int voice = IndexOf(voice_keys, cfg.voice);
-  row = BeginRow("Personality", "Each villager type has its own pitch and pace");
-  Picker(row, Labels(Voices(), [](const VoiceInfo& v) { return std::string(v.label); }), &voice);
-  cfg.voice = voice_keys[voice];
-  EndRow(row);
+  if (cfg.engine == "piper") {
+    Header("Piper Neural Voice Settings");
+    auto piper_models = DiscoverPiperModels(cfg.piper_dir);
+    if (!piper_models.empty()) {
+      std::vector<std::string> model_labels;
+      std::vector<std::string> model_paths;
+      for (const auto& m : piper_models) {
+        model_labels.push_back(m.name);
+        model_paths.push_back(m.path);
+      }
+      int m_idx = IndexOf(model_paths, cfg.piper_model);
+      row = BeginRow("Model Voice", "Locally installed Piper voice model");
+      Picker(row, model_labels, &m_idx);
+      cfg.piper_model = model_paths[m_idx];
+      EndRow(row);
+    } else {
+      row = BeginRow("Piper Models", "No models found in ~/.local/share/piper-voices");
+      EndRow(row);
+    }
 
-  char sub[64];
-  std::snprintf(sub, sizeof(sub), "%+.0f semitones", cfg.pitch);
-  row = BeginRow("Pitch", sub);
-  Slider(row, &cfg.pitch, -12, 12, 1, "Lower", "Higher");
-  EndRow(row);
+    if (!g_piper_model_loaded) {
+      std::snprintf(g_piper_model, sizeof(g_piper_model), "%s", cfg.piper_model.c_str());
+      g_piper_model_loaded = true;
+    }
+    row = BeginRow("Custom Model File", "Direct path to an .onnx model file");
+    bool done = false;
+    TextField(row, "##piper_model_input", g_piper_model, sizeof(g_piper_model), "Auto-detect or custom path", &done);
+    if (done) cfg.piper_model = g_piper_model;
+    EndRow(row);
 
-  std::snprintf(sub, sizeof(sub), "%.0f%% of the villager's pace", cfg.speed * 100);
-  row = BeginRow("Speed", sub);
-  Slider(row, &cfg.speed, 0.5, 2.0, 0.05, "Slower", "Faster");
-  EndRow(row);
+    char sub[64];
+    std::snprintf(sub, sizeof(sub), "%.0f%% of normal pace", cfg.piper_speed * 100);
+    row = BeginRow("Speed", sub);
+    Slider(row, &cfg.piper_speed, 0.5, 2.0, 0.05, "Slower", "Faster");
+    EndRow(row);
+
+    const bool piper_ok = IsPiperInstalled();
+    row = BeginRow("Piper Binary", piper_ok ? "Found in PATH" : "Not found; install piper-tts or place in ~/.local/bin");
+    StatusDot(row, piper_ok);
+    EndRow(row);
+  } else if (cfg.engine == "espeak") {
+    Header("eSpeak-NG Settings");
+    const auto& espeak_voices = GetESpeakVoices();
+    std::vector<std::string> voice_labels;
+    std::vector<std::string> voice_codes;
+    for (const auto& v : espeak_voices) {
+      voice_labels.push_back(v.name);
+      voice_codes.push_back(v.code);
+    }
+    int v_idx = IndexOf(voice_codes, cfg.espeak_voice);
+    row = BeginRow("Voice / Accent", "Language and accent style");
+    Picker(row, voice_labels, &v_idx);
+    cfg.espeak_voice = voice_codes[v_idx];
+    EndRow(row);
+
+    char sub[64];
+    std::snprintf(sub, sizeof(sub), "%.0f words per minute", cfg.espeak_speed);
+    row = BeginRow("Speed", sub);
+    Slider(row, &cfg.espeak_speed, 80, 350, 5, "Slower", "Faster");
+    EndRow(row);
+
+    std::snprintf(sub, sizeof(sub), "Pitch: %.0f", cfg.espeak_pitch);
+    row = BeginRow("Pitch", sub);
+    Slider(row, &cfg.espeak_pitch, 0, 99, 1, "Lower", "Higher");
+    EndRow(row);
+  } else if (cfg.engine == "animalese") {
+    Header("Animal Crossing Settings");
+    const auto style_keys = Labels(Styles(), [](const StyleInfo& s) { return std::string(s.key); });
+    int style = IndexOf(style_keys, cfg.style);
+    row = BeginRow("Game Style", "Which Animal Crossing game the voice copies");
+    Picker(row, Labels(Styles(), [](const StyleInfo& s) { return std::string(s.label); }), &style);
+    cfg.style = style_keys[style];
+    EndRow(row);
+
+    const auto voice_keys = Labels(Voices(), [](const VoiceInfo& v) { return std::string(v.key); });
+    int voice = IndexOf(voice_keys, cfg.voice);
+    row = BeginRow("Personality", "Each villager type has its own pitch and pace");
+    Picker(row, Labels(Voices(), [](const VoiceInfo& v) { return std::string(v.label); }), &voice);
+    cfg.voice = voice_keys[voice];
+    EndRow(row);
+
+    char sub[64];
+    std::snprintf(sub, sizeof(sub), "%+.0f semitones", cfg.pitch);
+    row = BeginRow("Pitch", sub);
+    Slider(row, &cfg.pitch, -12, 12, 1, "Lower", "Higher");
+    EndRow(row);
+
+    std::snprintf(sub, sizeof(sub), "%.0f%% of the villager's pace", cfg.speed * 100);
+    row = BeginRow("Speed", sub);
+    Slider(row, &cfg.speed, 0.5, 2.0, 0.05, "Slower", "Faster");
+    EndRow(row);
+
+    if (!g_pack_loaded) {
+      std::snprintf(g_pack, sizeof(g_pack), "%s", cfg.sample_pack.c_str());
+      g_pack_loaded = true;
+    }
+    row = BeginRow("Letter Samples", "a.wav to z.wav for the exact game sound (Classic only)");
+    bool done = false;
+    TextField(row, "##pack", g_pack, sizeof(g_pack), "Built-in voice", &done);
+    if (done) cfg.sample_pack = g_pack;
+    EndRow(row);
+  }
 
   Header("Try It");
-  row = BeginRow("Test Message", "Press Enter to hear it");
-  if (TextField(row, "##test", g_test, sizeof(g_test), "Type something", nullptr) && g_test[0]) Say(g_test, true);
+  row = BeginRow("Test Message", "Press Enter to hear the voice");
+  if (TextField(row, "##test_tts", g_test, sizeof(g_test), "Type something", nullptr) && g_test[0]) Say(g_test, true);
   EndRow(row);
 }
 
@@ -610,7 +700,7 @@ void OutputPage(Config& cfg) {
   Slider(row, &cfg.local_volume, 0, 1.5, 0.05, "Quiet", "Loud");
   EndRow(row);
 
-  row = BeginRow("Keep My Microphone On", "Off: voice chat only hears the Animalese voice");
+  row = BeginRow("Keep My Microphone On", "Off: voice chat only hears the TTS voice");
   Switch(row, &cfg.mix_real_mic);
   EndRow(row);
 
@@ -635,26 +725,30 @@ void SettingsPage(Config& cfg) {
   cfg.menu_button = keys[where];
   EndRow(row);
 
-  Header("Letter Samples");
-  if (!g_pack_loaded) {
-    std::snprintf(g_pack, sizeof(g_pack), "%s", cfg.sample_pack.c_str());
-    g_pack_loaded = true;
+  Header("Piper Models Directory");
+  if (!g_piper_dir_loaded) {
+    std::snprintf(g_piper_dir, sizeof(g_piper_dir), "%s", cfg.piper_dir.c_str());
+    g_piper_dir_loaded = true;
   }
-  row = BeginRow("Sample Folder", "a.wav to z.wav for the exact game sound (Classic only)");
+  row = BeginRow("Custom Voices Folder", "Additional directory to scan for .onnx models");
   bool done = false;
-  TextField(row, "##pack", g_pack, sizeof(g_pack), "Built-in voice", &done);
-  if (done) cfg.sample_pack = g_pack;
+  TextField(row, "##piper_dir", g_piper_dir, sizeof(g_piper_dir), "Default (~/.local/share/piper-voices)", &done);
+  if (done) cfg.piper_dir = g_piper_dir;
   EndRow(row);
 
   Header("About");
   const std::string last = LastMessage();
-  row = BeginRow("Nightcap AC", last.empty() ? "Nothing spoken yet" : ("Last spoken: " + last).c_str());
+  row = BeginRow("Vox TTS", last.empty() ? "Nothing spoken yet" : ("Last spoken: " + last).c_str());
   EndRow(row);
 }
 
 bool Same(const Config& a, const Config& b) {
-  return a.enabled == b.enabled && a.output == b.output && a.voice == b.voice && a.style == b.style &&
-         a.pitch == b.pitch && a.speed == b.speed && a.vc_volume == b.vc_volume &&
+  return a.enabled == b.enabled && a.output == b.output && a.engine == b.engine &&
+         a.piper_model == b.piper_model && a.piper_dir == b.piper_dir &&
+         a.piper_speed == b.piper_speed && a.espeak_voice == b.espeak_voice &&
+         a.espeak_speed == b.espeak_speed && a.espeak_pitch == b.espeak_pitch &&
+         a.voice == b.voice && a.style == b.style && a.pitch == b.pitch &&
+         a.speed == b.speed && a.vc_volume == b.vc_volume &&
          a.local_volume == b.local_volume && a.mix_real_mic == b.mix_real_mic &&
          a.skip_commands == b.skip_commands && a.sample_pack == b.sample_pack &&
          a.menu_button == b.menu_button;
@@ -696,7 +790,7 @@ void SwitchTab(int tab) {
 }
 
 void DrawPage(int tab, Config& cfg) {
-  if (tab == 0) VoicePage(cfg);
+  if (tab == 0) TTSPage(cfg);
   if (tab == 1) OutputPage(cfg);
   if (tab == 2) SettingsPage(cfg);
   ImGui::Dummy(ImVec2(1, S(8)));
@@ -728,10 +822,11 @@ void DrawMenu(Config& cfg, float W, float H, bool closing) {
 
   // Tabs: Roblox icon + label; the active one is white with an underline.
   struct Tab { const char* label; const char* icon; } tabs[] = {
-      {"Voice", "frame-bubble-soundwave"}, {"Output", "speaker"}, {"Settings", "gear"}};
+      {"TTS", "frame-bubble-soundwave"}, {"Output", "speaker"}, {"Settings", "gear"}};
+  constexpr int kNumTabs = 3;
   const float inset = S(20), tab_h = S(60);
-  const float tab_w = (pw - inset * 2) / 3;
-  for (int i = 0; i < 3; ++i) {
+  const float tab_w = (pw - inset * 2) / kNumTabs;
+  for (int i = 0; i < kNumTabs; ++i) {
     const ImVec2 a(p0.x + inset + i * tab_w, p0.y), b(a.x + tab_w, p0.y + tab_h);
     bool hovered = false;
     if (!closing) {
@@ -866,7 +961,7 @@ void DrawTopBarButton(bool open, bool closing, float W) {
   const overlay::Metrics m = overlay::GetMetrics();
   float x, y, size;
   if (!overlay::ButtonRect(m.window_w > 0 ? m.window_w : static_cast<int>(W / g_px), &x, &y, &size)) return;
-  const bool forced = std::getenv("NIGHTCAP_AC_SHOW_BUTTON") != nullptr;
+  const bool forced = std::getenv("VOX_TTS_SHOW_BUTTON") != nullptr || std::getenv("NIGHTCAP_AC_SHOW_BUTTON") != nullptr;
   if (!open && !closing && !forced && !InGame()) return;
   ImDrawList* dl = ImGui::GetForegroundDrawList();
   const ImVec2 c(S(x + size / 2), S(y + size / 2));
@@ -1026,7 +1121,7 @@ bool Draw(float px, bool srgb) {
                            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                            ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollWithMouse;
   if (!open) flags |= ImGuiWindowFlags_NoInputs;
-  ImGui::Begin("##nightcap-ac", nullptr, flags);
+  ImGui::Begin("##vox-tts", nullptr, flags);
   g_dl = ImGui::GetWindowDrawList();
   if (open) {
     UpdateNav();
@@ -1046,7 +1141,8 @@ bool Draw(float px, bool srgb) {
   overlay::SetWantsText(open && io.WantTextInput);
   if (!Same(cfg, before)) SetConfig(cfg);
   SaveConfigIfDirty();
-  const bool button_on = cfg.menu_button != "off" && (InGame() || std::getenv("NIGHTCAP_AC_SHOW_BUTTON"));
+  const bool button_on = cfg.menu_button != "off" &&
+                         (InGame() || std::getenv("VOX_TTS_SHOW_BUTTON") || std::getenv("NIGHTCAP_AC_SHOW_BUTTON"));
   return open || closing || button_on;
 }
 

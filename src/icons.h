@@ -5,8 +5,8 @@
 // codepoints may shift between Roblox versions, so icons are found by name
 // ("gear", "chevron-large-left", ...) from the font's own tables.
 
-#ifndef NIGHTCAP_AC_ICONS_H_
-#define NIGHTCAP_AC_ICONS_H_
+#ifndef VOX_TTS_ICONS_H_
+#define VOX_TTS_ICONS_H_
 
 #include <cstdint>
 #include <map>
@@ -34,4 +34,4 @@ std::string FindRobloxIconFont();
 
 }  // namespace nac
 
-#endif  // NIGHTCAP_AC_ICONS_H_
+#endif  // VOX_TTS_ICONS_H_

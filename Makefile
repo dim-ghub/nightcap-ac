@@ -5,7 +5,9 @@ PREFIX ?= $(HOME)/.local
 SDL_CFLAGS := $(shell pkg-config --cflags sdl3)
 SDL_LIBS := $(shell pkg-config --libs sdl3)
 
-LIB := build/libnightcap_ac.so
+LIB := build/libvox_tts.so
+LEGACY_LIB := build/libnightcap_ac.so
+
 SRC := $(wildcard src/*.cc)
 IMGUI := third_party/imgui/imgui.cpp third_party/imgui/imgui_draw.cpp \
 	third_party/imgui/imgui_tables.cpp third_party/imgui/imgui_widgets.cpp \
@@ -22,7 +24,7 @@ FLAGS := -std=c++17 -fPIC -fvisibility=hidden -fvisibility-inlines-hidden \
 
 all: build
 
-build: $(LIB) build/nightcap-ac-render
+build: $(LIB) $(LEGACY_LIB) build/vox-tts-render build/nightcap-ac-render
 
 build/obj/%.o: src/%.cc $(wildcard src/*.h src/*.inc)
 	@mkdir -p $(dir $@)
@@ -33,11 +35,20 @@ build/obj/imgui/%.o: third_party/imgui/%.cpp
 	$(CXX) $(CXXFLAGS) $(FLAGS) -w -c -o $@ $<
 
 $(LIB): $(OBJ) src/exports.map
+	@mkdir -p build
 	$(CXX) -shared -o $@ $(OBJ) $(SDL_LIBS) -ldl -lpthread -Wl,--no-undefined \
 		-Wl,--version-script=src/exports.map
 
-build/nightcap-ac-render: tools/render.cc src/synth.cc src/synth.h
+$(LEGACY_LIB): $(LIB)
+	@mkdir -p build
+	ln -sf libvox_tts.so $@
+
+build/vox-tts-render: tools/render.cc src/synth.cc src/synth.h
+	@mkdir -p build
 	$(CXX) $(CXXFLAGS) -std=c++17 -Wall -Wextra -o $@ tools/render.cc src/synth.cc
+
+build/nightcap-ac-render: build/vox-tts-render
+	ln -sf vox-tts-render $@
 
 TEST_BINS := build/vk_driver build/mic_driver build/chat_test
 
@@ -69,26 +80,30 @@ DESKTOP_SOURCE ?= $(firstword $(wildcard \
 MARKER := X-Nightcap-AC=true
 
 install: build
-	install -Dm755 $(LIB) $(PREFIX)/lib/nightcap-ac/libnightcap_ac.so
-	strip --strip-debug $(PREFIX)/lib/nightcap-ac/libnightcap_ac.so
-	install -Dm755 scripts/nightcap-ac $(BINDIR)/nightcap-ac
+	install -Dm755 $(LIB) $(PREFIX)/lib/vox-tts/libvox_tts.so
+	strip --strip-debug $(PREFIX)/lib/vox-tts/libvox_tts.so
+	@mkdir -p $(PREFIX)/lib/nightcap-ac
+	ln -sf ../vox-tts/libvox_tts.so $(PREFIX)/lib/nightcap-ac/libnightcap_ac.so
+	install -Dm755 scripts/vox-tts $(BINDIR)/vox-tts
+	install -Dm755 scripts/vox-tts-download-voice $(BINDIR)/vox-tts-download-voice
+	ln -sf vox-tts $(BINDIR)/nightcap-ac
+	install -Dm644 packaging/vox_tts_layer.json.in $(PREFIX)/share/vox-tts/vox_tts_layer.json.in
+	@mkdir -p $(PREFIX)/share/nightcap-ac
 	install -Dm644 packaging/nightcap_ac_layer.json.in $(PREFIX)/share/nightcap-ac/nightcap_ac_layer.json.in
+	install -Dm644 packaging/vox-tts.desktop $(PREFIX)/share/applications/vox-tts.desktop
 	install -Dm644 packaging/nightcap-ac.desktop $(PREFIX)/share/applications/nightcap-ac.desktop
-	@# Leftovers from the standalone (Python + virtual mic) version; closing
-	@# it puts Nightcap's mic back and removes its virtual devices.
-	-@pkill -TERM -f '^/usr/bin/python3 -m nightcap_ac' && echo "closed the old Nightcap AC app" || true
+	@# Clean up any old standalone leftovers
+	-@pkill -TERM -f '^/usr/bin/python3 -m nightcap_ac' 2>/dev/null || true
 	rm -rf $(PREFIX)/share/nightcap-ac/nightcap_ac $(PREFIX)/lib/nightcap-ac/libnightcap_ac_hook.so
 	rm -f $(PREFIX)/share/applications/nightcap-ac-roblox.desktop
-	@# Offer to patch Nightcap's own launcher entry (NIGHTCAP_AC_DESKTOP=y|n
-	@# answers for scripted installs). An existing patch is just refreshed.
 	@if grep -qxF '$(MARKER)' '$(DESKTOP_TARGET)' 2>/dev/null; then \
 	  $(MAKE) --no-print-directory patch-desktop; \
 	else \
-	  answer='$(NIGHTCAP_AC_DESKTOP)'; \
+	  answer='$(or $(VOX_TTS_DESKTOP),$(NIGHTCAP_AC_DESKTOP))'; \
 	  if [ -z "$$answer" ] && [ -t 0 ]; then \
 	    echo; \
 	    echo "Patch Nightcap's launcher so the Nightcap app entry and roblox:// links"; \
-	    echo "(joining from the website) start Nightcap with Nightcap AC?"; \
+	    echo "start Nightcap with Vox TTS?"; \
 	    echo "This writes a copy of Nightcap's entry to $(DESKTOP_TARGET)."; \
 	    echo "Undo any time with 'make unpatch-desktop'."; \
 	    printf 'Patch it? [y/N] '; read -r answer; \
@@ -99,19 +114,15 @@ install: build
 	  esac; \
 	fi
 
-# Copies Nightcap's entry with its main Exec going through nightcap-ac. The
-# Settings action is kept; X-Mocktail-Managed is dropped so Nightcap's
-# register_url_handler.sh won't overwrite the copy. An entry you had there
-# yourself is backed up and comes back with unpatch-desktop.
 patch-desktop:
 	@[ -n '$(DESKTOP_SOURCE)' ] || { echo "Nightcap's desktop entry was not found; is Nightcap installed?"; exit 1; }
 	@mkdir -p '$(dir $(DESKTOP_TARGET))'
 	@if [ -e '$(DESKTOP_TARGET)' ] && ! grep -qxF '$(MARKER)' '$(DESKTOP_TARGET)'; then \
-	  cp -p '$(DESKTOP_TARGET)' '$(DESKTOP_TARGET).nightcap-ac-backup'; \
+	  cp -p '$(DESKTOP_TARGET)' '$(DESKTOP_TARGET).vox-tts-backup'; \
 	fi
 	@awk -v launcher='$(BINDIR)/nightcap-ac' -v marker='$(MARKER)' ' \
 	  /^\[/ { group = $$0; print; if (group == "[Desktop Entry]") print marker; next } \
-	  group == "[Desktop Entry]" && ($$0 == "X-Mocktail-Managed=true" || $$0 == marker) { next } \
+	  group == "[Desktop Entry]" && ($$0 == "X-Mocktail-Managed=true" || $$0 == marker || $$0 == "X-Vox-TTS=true") { next } \
 	  group == "[Desktop Entry]" && /^Exec=/ && !done { print "Exec=env SDL_VIDEODRIVER=wayland,x11 " launcher " %u"; done = 1; next } \
 	  { print }' '$(DESKTOP_SOURCE)' > '$(DESKTOP_TARGET).tmp'
 	@chmod 644 '$(DESKTOP_TARGET).tmp' && mv '$(DESKTOP_TARGET).tmp' '$(DESKTOP_TARGET)'
@@ -121,18 +132,21 @@ patch-desktop:
 
 unpatch-desktop:
 	@if [ ! -e '$(DESKTOP_TARGET)' ]; then echo "No launcher patch installed"; \
-	elif ! grep -qxF '$(MARKER)' '$(DESKTOP_TARGET)'; then echo "Left $(DESKTOP_TARGET) alone: not written by Nightcap AC"; \
+	elif ! grep -qxF '$(MARKER)' '$(DESKTOP_TARGET)' && ! grep -qxF 'X-Nightcap-AC=true' '$(DESKTOP_TARGET)'; then echo "Left $(DESKTOP_TARGET) alone: not written by Vox TTS"; \
 	else \
 	  rm -f '$(DESKTOP_TARGET)'; \
-	  if [ -e '$(DESKTOP_TARGET).nightcap-ac-backup' ]; then \
+	  if [ -e '$(DESKTOP_TARGET).vox-tts-backup' ]; then \
+	    mv '$(DESKTOP_TARGET).vox-tts-backup' '$(DESKTOP_TARGET)'; echo "Restored your previous $(DESKTOP_TARGET)"; \
+	  elif [ -e '$(DESKTOP_TARGET).nightcap-ac-backup' ]; then \
 	    mv '$(DESKTOP_TARGET).nightcap-ac-backup' '$(DESKTOP_TARGET)'; echo "Restored your previous $(DESKTOP_TARGET)"; \
 	  else echo "Removed $(DESKTOP_TARGET); the system Nightcap entry is used again"; fi; \
 	  update-desktop-database -q '$(dir $(DESKTOP_TARGET))' 2>/dev/null || true; \
 	fi
 
 uninstall: unpatch-desktop
-	rm -f $(BINDIR)/nightcap-ac $(PREFIX)/share/applications/nightcap-ac.desktop
-	rm -rf $(PREFIX)/lib/nightcap-ac $(PREFIX)/share/nightcap-ac
+	rm -f $(BINDIR)/vox-tts $(BINDIR)/vox-tts-download-voice $(BINDIR)/nightcap-ac
+	rm -f $(PREFIX)/share/applications/vox-tts.desktop $(PREFIX)/share/applications/nightcap-ac.desktop
+	rm -rf $(PREFIX)/lib/vox-tts $(PREFIX)/lib/nightcap-ac $(PREFIX)/share/vox-tts $(PREFIX)/share/nightcap-ac
 
 clean:
 	rm -rf build

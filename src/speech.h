@@ -1,8 +1,9 @@
-// Turns messages into Animalese and plays them: into Nightcap's own
-// microphone stream (so Roblox voice chat hears it) and/or on your speakers.
+// Synthesizes chat messages via the selected TTS backend (Piper, eSpeak-NG,
+// or Animalese) and plays them: into Nightcap's own microphone stream (so Roblox
+// voice chat hears it) and/or on your speakers.
 
-#ifndef NIGHTCAP_AC_SPEECH_H_
-#define NIGHTCAP_AC_SPEECH_H_
+#ifndef VOX_TTS_SPEECH_H_
+#define VOX_TTS_SPEECH_H_
 
 #include <SDL3/SDL.h>
 
@@ -25,4 +26,4 @@ std::string LastMessage();
 
 }  // namespace nac
 
-#endif  // NIGHTCAP_AC_SPEECH_H_
+#endif  // VOX_TTS_SPEECH_H_

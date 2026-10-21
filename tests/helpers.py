@@ -9,26 +9,33 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / "build"
-LIB = BUILD / "libnightcap_ac.so"
-LAUNCHER = ROOT / "scripts" / "nightcap-ac"
+LIB = BUILD / "libvox_tts.so" if (BUILD / "libvox_tts.so").exists() else BUILD / "libnightcap_ac.so"
+LAUNCHER = ROOT / "scripts" / "vox-tts" if (ROOT / "scripts" / "vox-tts").exists() else ROOT / "scripts" / "nightcap-ac"
 
 
 def layer_dir(tmp: Path) -> Path:
     d = tmp / "layer"
     d.mkdir(exist_ok=True)
-    template = (ROOT / "packaging" / "nightcap_ac_layer.json.in").read_text()
+    tmpl_path = ROOT / "packaging" / "vox_tts_layer.json.in"
+    if not tmpl_path.exists():
+        tmpl_path = ROOT / "packaging" / "nightcap_ac_layer.json.in"
+    template = tmpl_path.read_text()
+    (d / "vox_tts_layer.json").write_text(template.replace("@LIB@", str(LIB)))
     (d / "nightcap_ac_layer.json").write_text(template.replace("@LIB@", str(LIB)))
     return d
 
 
 def env_with_lib(tmp: Path, config: str | None = None, **extra) -> dict:
     cfg = tmp / "cfg"
+    (cfg / "vox-tts").mkdir(parents=True, exist_ok=True)
     (cfg / "nightcap-ac").mkdir(parents=True, exist_ok=True)
     if config is not None:
+        (cfg / "vox-tts" / "config.json").write_text(config)
         (cfg / "nightcap-ac" / "config.json").write_text(config)
     env = dict(os.environ,
                LD_PRELOAD=str(LIB),
                VK_ADD_IMPLICIT_LAYER_PATH=str(layer_dir(tmp)),
+               VOX_TTS_LAYER="1",
                NIGHTCAP_AC_LAYER="1",
                XDG_CONFIG_HOME=str(cfg),
                XDG_RUNTIME_DIR=str(tmp),

@@ -1,8 +1,8 @@
 // The in-game menu, drawn with Dear ImGui in the style of Roblox's own
 // in-experience menu, and the top-bar button that opens it.
 
-#ifndef NIGHTCAP_AC_UI_H_
-#define NIGHTCAP_AC_UI_H_
+#ifndef VOX_TTS_UI_H_
+#define VOX_TTS_UI_H_
 
 #include <vector>
 
@@ -21,4 +21,4 @@ bool Draw(float px_per_unit, bool srgb_target);
 
 }  // namespace nac::ui
 
-#endif  // NIGHTCAP_AC_UI_H_
+#endif  // VOX_TTS_UI_H_

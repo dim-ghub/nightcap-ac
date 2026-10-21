@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Downloads a Piper voice model from Hugging Face into ~/.local/share/piper-voices.
+# Usage:
+#   vox-tts-download-voice [VOICE_NAME]
+#
+# Examples:
+#   vox-tts-download-voice en_US-lessac-medium
+#   vox-tts-download-voice en_US-amy-medium
+#   vox-tts-download-voice en_US-ryan-medium
+
+set -euo pipefail
+
+VOICE="${1:-en_US-lessac-medium}"
+TARGET_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/piper-voices"
+mkdir -p "$TARGET_DIR"
+
+BASE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main"
+
+# Parse language and voice from name (e.g. en_US-lessac-medium)
+IFS='-' read -r lang_code voice_name quality <<< "$VOICE"
+lang_prefix="${lang_code%%_*}"
+
+URL_ONNX="${BASE_URL}/${lang_prefix}/${lang_code}/${voice_name}/${quality}/${VOICE}.onnx"
+URL_JSON="${BASE_URL}/${lang_prefix}/${lang_code}/${voice_name}/${quality}/${VOICE}.onnx.json"
+
+echo "Downloading voice model: $VOICE"
+echo "Destination: $TARGET_DIR"
+
+curl -L -f --progress-bar -o "$TARGET_DIR/${VOICE}.onnx" "$URL_ONNX"
+curl -L -f --progress-bar -o "$TARGET_DIR/${VOICE}.onnx.json" "$URL_JSON"
+
+echo "Successfully downloaded $VOICE to $TARGET_DIR"

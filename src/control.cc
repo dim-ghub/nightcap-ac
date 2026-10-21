@@ -1,6 +1,7 @@
 // A datagram socket the launcher uses to reach a running Nightcap:
-// $XDG_RUNTIME_DIR/nightcap-ac/control-<pid>.sock. Sending "open" opens the
-// in-game menu (when Nightcap AC is opened while Nightcap already runs).
+// $XDG_RUNTIME_DIR/vox-tts/control-<pid>.sock (with legacy nightcap-ac symlink).
+// Sending "open" opens the in-game menu (when Vox TTS is launched while
+// Nightcap is already running).
 
 #include "control.h"
 
@@ -26,9 +27,12 @@ std::once_flag g_started;
 void Serve() {
   const char* runtime = std::getenv("XDG_RUNTIME_DIR");
   if (runtime == nullptr || *runtime == 0) return;
-  const std::string dir = std::string(runtime) + "/nightcap-ac";
+  const std::string dir = std::string(runtime) + "/vox-tts";
+  const std::string legacy_dir = std::string(runtime) + "/nightcap-ac";
   mkdir(dir.c_str(), 0700);
+  mkdir(legacy_dir.c_str(), 0700);
   const std::string path = dir + "/control-" + std::to_string(getpid()) + ".sock";
+  const std::string legacy_path = legacy_dir + "/control-" + std::to_string(getpid()) + ".sock";
   sockaddr_un addr{};
   if (path.size() >= sizeof(addr.sun_path)) return;
   addr.sun_family = AF_UNIX;
@@ -41,9 +45,15 @@ void Serve() {
     return;
   }
   chmod(path.c_str(), 0600);
+  unlink(legacy_path.c_str());
+  symlink(path.c_str(), legacy_path.c_str());
+
   std::atexit([] {
     const char* rt = std::getenv("XDG_RUNTIME_DIR");
-    if (rt) unlink((std::string(rt) + "/nightcap-ac/control-" + std::to_string(getpid()) + ".sock").c_str());
+    if (rt) {
+      unlink((std::string(rt) + "/vox-tts/control-" + std::to_string(getpid()) + ".sock").c_str());
+      unlink((std::string(rt) + "/nightcap-ac/control-" + std::to_string(getpid()) + ".sock").c_str());
+    }
   });
   char buf[64];
   while (true) {

@@ -1,7 +1,7 @@
 // Control socket for the launcher (see control.cc).
 
-#ifndef NIGHTCAP_AC_CONTROL_H_
-#define NIGHTCAP_AC_CONTROL_H_
+#ifndef VOX_TTS_CONTROL_H_
+#define VOX_TTS_CONTROL_H_
 
 namespace nac {
 
@@ -10,4 +10,4 @@ void StartControl();
 
 }  // namespace nac
 
-#endif  // NIGHTCAP_AC_CONTROL_H_
+#endif  // VOX_TTS_CONTROL_H_

@@ -1,5 +1,5 @@
-// Renders text to a WAV file with the in-app synthesizer:
-//   nightcap-ac-render OUT.wav "text" [voice] [style] [pitch] [speed] [pack]
+// Renders text to a WAV file with the Animalese synthesizer:
+//   vox-tts-render OUT.wav "text" [voice] [style] [pitch] [speed] [pack]
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>

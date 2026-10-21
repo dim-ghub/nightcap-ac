@@ -87,6 +87,23 @@ class OverlayTest(unittest.TestCase):
             self.assertLess(sum(pixel(output, 370, 134)), 300)
             self.assertGreater(sum(pixel(output, 640, 134)), 600)
 
+    def test_config_migration_from_legacy(self):
+        with tempdir() as t:
+            tmp = Path(t)
+            legacy_dir = tmp / "cfg" / "nightcap-ac"
+            legacy_dir.mkdir(parents=True, exist_ok=True)
+            (legacy_dir / "config.json").write_text(json.dumps({
+                "enabled": True,
+                "voice": "cranky",
+                "style": "nh"
+            }))
+            r, _ = vk(tmp, "15 key 0x40000041\n", NIGHTCAP_AC_MENU_OPEN=1)  # F8 toggle
+            vox_cfg = tmp / "cfg" / "vox-tts" / "config.json"
+            self.assertTrue(vox_cfg.exists(), "migrated config to vox-tts directory")
+            data = json.loads(vox_cfg.read_text())
+            self.assertEqual(data.get("voice"), "cranky")
+            self.assertEqual(data.get("style"), "nh")
+
     def test_button_hover(self):
         with tempdir() as t:
             tmp = Path(t)
@@ -112,15 +129,18 @@ class OverlayTest(unittest.TestCase):
     def test_keyboard_selection(self):
         with tempdir() as t:
             tmp = Path(t)
-            # Tab selects the first row, ↓↓ moves to Personality, → changes it.
-            script = "15 key 0x09\n17 key 0x40000051\n19 key 0x40000051\n21 key 0x4000004f\n"
+            # Tab selects the first row, ↓ moves to Speech Engine, → changes it to Animalese.
+            script = "15 key 0x09\n17 key 0x40000051\n19 key 0x4000004f\n"
             r, img = vk(tmp, script, NIGHTCAP_AC_MENU_OPEN=1)
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertEqual(r.stdout.count("game got key"), 0, "keys stay in the menu")
-            cfg = json.loads((tmp / "cfg/nightcap-ac/config.json").read_text())
-            self.assertEqual(cfg["voice"], "peppy")
+            cfg_file = tmp / "cfg/vox-tts/config.json"
+            if not cfg_file.exists():
+                cfg_file = tmp / "cfg/nightcap-ac/config.json"
+            cfg = json.loads(cfg_file.read_text())
+            self.assertEqual(cfg["engine"], "animalese")
             # The white selection outline around that row.
-            self.assertGreater(max(sum(pixel(img, x, 358)) for x in range(235, 242)), 600)
+            self.assertGreater(max(sum(pixel(img, x, 280)) for x in range(235, 242)), 600)
 
     def test_menu_slides_up_when_it_opens(self):
         with tempdir() as t:
@@ -138,12 +158,15 @@ class OverlayTest(unittest.TestCase):
             self.assertGreater(tab_underline_y(early) or 10**6, tab_underline_y(settled))
 
 
-def capture(tmp: Path, keep_mic: bool, message="Hello there, how are you?"):
+def capture(tmp: Path, keep_mic: bool, message="Hello there, how are you?", engine=None):
     # The mic plays a 300 Hz tone so "keep my microphone" is observable.
     tone = b"".join(struct.pack("<h", int(8000 * math.sin(2 * math.pi * 300 * i / 48000)))
                     for i in range(48000 * 8))
     (tmp / "micin.raw").write_bytes(tone)
-    config = json.dumps({"enabled": True, "output": "vc", "mix_real_mic": keep_mic})
+    cfg_data = {"enabled": True, "output": "vc", "mix_real_mic": keep_mic}
+    if engine is not None:
+        cfg_data["engine"] = engine
+    config = json.dumps(cfg_data)
     env = env_with_lib(tmp, config, SDL_AUDIO_DRIVER="disk",
                        SDL_AUDIO_DISK_INPUT_FILE=tmp / "micin.raw",
                        SDL_AUDIO_DISK_OUTPUT_FILE="/dev/null")
@@ -165,6 +188,13 @@ class MicTest(unittest.TestCase):
             self.assertIn("speaking a chat message", r.stderr)
             self.assertLess(level(audio, 0.2, 0.9), 0.001, "mic muted when not kept")
             self.assertGreater(level(audio, 1.3, 3.0), 0.05, "speech is in the mic stream")
+
+    def test_animalese_engine_in_microphone(self):
+        with tempdir() as t:
+            r, audio = capture(Path(t), keep_mic=False, engine="animalese")
+            self.assertIn("speaking a chat message", r.stderr)
+            self.assertLess(level(audio, 0.2, 0.9), 0.001, "mic muted when not kept")
+            self.assertGreater(level(audio, 1.3, 3.0), 0.05, "animalese speech is in the mic stream")
 
     def test_real_microphone_can_stay_on(self):
         with tempdir() as t:

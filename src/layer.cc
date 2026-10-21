@@ -1,4 +1,4 @@
-// Vulkan layer that draws the Nightcap AC menu onto Nightcap's frames.
+// Vulkan layer that draws the Vox TTS menu onto Nightcap's frames.
 //
 // The same library is LD_PRELOADed (SDL hooks) and named in an implicit
 // layer manifest, so the loader dlopen()s the already loaded copy and both
@@ -6,9 +6,9 @@
 // into the swapchain image, waiting on the game's semaphores and signalling
 // our own, which the present then waits on.
 //
-// Debugging: NIGHTCAP_AC_DUMP=/path.ppm saves one composited frame (the 30th
-// drawn, or NIGHTCAP_AC_DUMP_FRAME), and
-// NIGHTCAP_AC_MENU_OPEN=1 starts with the menu open.
+// Debugging: VOX_TTS_DUMP (or legacy NIGHTCAP_AC_DUMP)=/path.ppm saves one composited
+// frame (the 30th drawn, or VOX_TTS_DUMP_FRAME / NIGHTCAP_AC_DUMP_FRAME), and
+// VOX_TTS_MENU_OPEN (or NIGHTCAP_AC_MENU_OPEN)=1 starts with the menu open.
 
 #include <vulkan/vk_layer.h>
 #include <vulkan/vulkan.h>
@@ -459,11 +459,14 @@ VkSemaphore DrawOverlay(SwapchainData* sc, VkQueue queue, uint32_t image_index,
   if (d->QueueSubmit(queue, 1, &submit, f.fence) != VK_SUCCESS) return VK_NULL_HANDLE;
   f.submitted = true;
 
-  if (const char* dump = std::getenv("NIGHTCAP_AC_DUMP")) {
+  const char* dump = std::getenv("VOX_TTS_DUMP");
+  if (!dump) dump = std::getenv("NIGHTCAP_AC_DUMP");
+  if (dump) {
     // Let a few frames settle (fonts, layout) before saving one.
     // Copying waits for our draw to finish; f.done stays signalled for
     // the present, so the handoff is unchanged.
-    const char* at = std::getenv("NIGHTCAP_AC_DUMP_FRAME");
+    const char* at = std::getenv("VOX_TTS_DUMP_FRAME");
+    if (!at) at = std::getenv("NIGHTCAP_AC_DUMP_FRAME");
     if (sc->can_copy && ++g_renderer.dumped == (at ? std::atoi(at) : 30)) DumpFrame(d, sc, f, queue, dump);
   }
   return f.done;
@@ -599,7 +602,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateSwapchainKHR(VkDevice device, const VkSwapc
   VkSwapchainCreateInfoKHR copy = *info;
   // We render into the images, and copy one out when debugging.
   copy.imageUsage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-  const bool dump = std::getenv("NIGHTCAP_AC_DUMP") != nullptr;
+  const bool dump = (std::getenv("VOX_TTS_DUMP") != nullptr || std::getenv("NIGHTCAP_AC_DUMP") != nullptr);
   if (dump) copy.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
   VkResult r = d->CreateSwapchainKHR(device, &copy, alloc, out);
   if (r != VK_SUCCESS) {
@@ -704,6 +707,8 @@ vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface* iface) {
   iface->pfnGetInstanceProcAddr = &nac::layer::GetInstanceProcAddr;
   iface->pfnGetDeviceProcAddr = &nac::layer::GetDeviceProcAddr;
   iface->pfnGetPhysicalDeviceProcAddr = nullptr;
-  if (std::getenv("NIGHTCAP_AC_MENU_OPEN")) nac::overlay::SetMenuOpenFlag(true);
+  if (std::getenv("VOX_TTS_MENU_OPEN") || std::getenv("NIGHTCAP_AC_MENU_OPEN")) {
+    nac::overlay::SetMenuOpenFlag(true);
+  }
   return VK_SUCCESS;
 }
