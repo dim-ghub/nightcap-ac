@@ -38,12 +38,11 @@ def f0(samples):
 
 
 class SynthTest(unittest.TestCase):
-    def test_every_style_speaks(self):
+    def test_animalese_speaks(self):
         with tempdir() as tmp:
-            for style in ("classic", "nh", "bebebese"):
-                audio = render(tmp, "Hello there!", style=style)
-                self.assertGreater(len(audio), SR // 4, style)
-                self.assertGreater(rms(audio), 0.02, style)
+            audio = render(tmp, "Hello there!")
+            self.assertGreater(len(audio), SR // 4)
+            self.assertGreater(rms(audio), 0.02)
 
     def test_speed_changes_length(self):
         with tempdir() as tmp:

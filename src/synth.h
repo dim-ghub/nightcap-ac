@@ -1,17 +1,8 @@
 // Animalese speech synthesis.
 //
-// Animal Crossing voices are built from tiny pitched-up speech blips that
-// play in step with the text box, one blip per character, at a pitch that
-// wobbles randomly around the speaker's voice and bends up for questions.
-//
-//   classic  - GameCube / Wild World / City Folk / New Leaf. One clipped
-//              letter sound per letter, fixed slot timing.
-//   nh       - New Horizons. Syllables that co-articulate consonants with
-//              their vowel, carried on a falling (or rising) sentence melody.
-//   bebebese - The "Bebebese" voice option: every letter is "be".
-//
-// The sounds are synthesized (harmonic voice source shaped by formant
-// resonances, plus filtered noise for consonants); no game audio is used.
+// Authentic Animal Crossing voices built from authentic character voice sprite banks
+// (Female 1–4, Male 1–4) for English and Korean, playing in step with the text box,
+// one blip per character, with subtle pitch jitter and question inflections.
 
 #ifndef VOX_TTS_SYNTH_H_
 #define VOX_TTS_SYNTH_H_

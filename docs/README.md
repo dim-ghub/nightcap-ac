@@ -12,7 +12,7 @@ Welcome to the Vox TTS documentation. Here you will find comprehensive guides on
   - Detailed overview of the three supported local speech engines:
     - **Piper (Neural AI)**: High-quality ONNX neural voices.
     - **eSpeak-NG**: Lightweight multi-accent retro formant speech.
-    - **Animal Crossing (Animalese)**: Algorithmic villager voice synthesizer with Classic, New Horizons, and Bebebese modes.
+    - **Animal Crossing (Animalese)**: Authentic villager voice synthesizer with English and Korean sound banks.
   - Instructions on downloading and managing custom voices and letter sound packs.
 
 - [Configuration Reference](configuration.md)

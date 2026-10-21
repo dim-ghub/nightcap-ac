@@ -73,25 +73,16 @@ Animalese works by converting input text into short phonetic speech "blips" time
 - **Vocal Tract Scaling**: Shifts formants higher to achieve the distinct "chipmunk" sound of animal characters.
 - **Intonation & Jitter**: Subtle random pitch variations per blip, bending upwards automatically for questions (`?`).
 
-### Game Styles
-1. **Classic** (*GameCube, Wild World, City Folk, New Leaf*):
-   - Fast, clipped letter blips with fixed slot timing.
-   - Compatible with custom sound packs.
-2. **New Horizons** (*Animal Crossing: New Horizons*):
-   - Articulates consonants into vowels, flowing over an expressive falling or rising sentence pitch contour.
-3. **Bebebese**:
-   - The comical "Bebebese" dialect where every letter blip repeats the syllable "be".
-
 ### Villager Personalities
-Each personality type configures base frequency ($f_0$), vocal tract formant scaling, speech tempo (characters per second), aspiration noise, and spectral tilt:
-- **Normal**: Sweet, balanced, moderate pitch ($430\text{ Hz}$).
-- **Peppy**: High-pitched, enthusiastic, fast tempo ($540\text{ Hz}$).
-- **Snooty**: Higher pitch, smooth spectral tilt ($490\text{ Hz}$).
-- **Sisterly / Uchi**: Grounded, slightly deeper tone ($330\text{ Hz}$).
-- **Lazy**: Slow, warm, deep blips ($230\text{ Hz}$).
-- **Jock**: Energetic, brisk cadence ($290\text{ Hz}$).
-- **Smug**: Melodic, self-assured intonation ($310\text{ Hz}$).
-- **Cranky**: Very deep, gravelly voice with high spectral tilt ($150\text{ Hz}$).
+Each personality type configures base frequency ($f_0$), speech tempo (characters per second), and voice sample banks:
+- **Female 1 (Normal / Sweet)**: Sweet, balanced, moderate pitch ($430\text{ Hz}$).
+- **Female 2 (Peppy)**: High-pitched, enthusiastic, fast tempo ($540\text{ Hz}$).
+- **Female 3 (Sisterly / Uchi)**: Grounded, slightly deeper tone ($300\text{ Hz}$).
+- **Female 4 (Snooty)**: Higher pitch, smooth cadence ($390\text{ Hz}$).
+- **Male 1 (Jock)**: Energetic, brisk cadence ($235\text{ Hz}$).
+- **Male 2 (Lazy)**: Slow, warm, deep blips ($205\text{ Hz}$).
+- **Male 3 (Smug)**: Melodic, self-assured intonation ($215\text{ Hz}$).
+- **Male 4 (Cranky)**: Very deep, gravelly voice ($105\text{ Hz}$).
 
 ### Custom Letter Samples
-For Classic style, you can supply your own folder of recorded letter blips (`a.wav` through `z.wav`) or an `Animalese.js` sound-sprite sheet. Specify the folder path in the **Letter Samples** setting to use authentic sound samples.
+You can also supply your own folder of recorded letter blips (`a.wav` through `z.wav`) or an `Animalese.js` sound-sprite sheet. Specify the folder path in the **Letter Samples** setting to use custom sound samples.

@@ -43,8 +43,6 @@ const std::vector<VoiceInfo> kVoices = {
 
 const std::vector<StyleInfo> kStyles = {
     {"classic", "Classic"},
-    {"nh", "New Horizons"},
-    {"bebebese", "Bebebese"},
 };
 
 // --------------------------------------------------------------------------
@@ -138,167 +136,6 @@ const std::map<char, Syllable> kLetters = {
     {'w', {{"d"}, "A", {}}},    {'x', {{}, "E", {"k", "s"}}},
     {'y', {{"w"}, "ai", {}}},   {'z', {{"z"}, "i", {}}},
 };
-
-const Syllable kBe = {{"b"}, "E", {}};
-
-bool IsVowel(const std::string& p) { return kVowels.count(p) != 0; }
-
-// --------------------------------------------------------------------------
-// New Horizons style: rough English spelling to syllables. It only has to
-// give each syllable the consonant and vowel colour the spelling suggests.
-
-const std::vector<std::pair<std::string, std::string>> kVowelGraphemes = {
-    {"eau", "o"}, {"igh", "ai"}, {"ee", "i"},  {"ea", "i"},  {"ie", "ai"},
-    {"ei", "e"},  {"ey", "e"},   {"ai", "e"},  {"ay", "e"},  {"oo", "u"},
-    {"ou", "au"}, {"ow", "o"},   {"oi", "oi"}, {"oy", "oi"}, {"oa", "o"},
-    {"au", "a"},  {"aw", "a"},   {"ue", "u"},  {"ew", "u"},  {"ui", "u"},
-    {"a", "ae"},  {"e", "E"},    {"i", "I"},   {"o", "a"},   {"u", "A"},
-};
-const std::map<std::string, std::string> kLong = {
-    {"ae", "e"}, {"I", "ai"}, {"a", "o"}, {"A", "u"}, {"E", "i"}};
-const std::vector<std::pair<std::string, std::vector<std::string>>>
-    kConsonantGraphemes = {
-        {"tch", {"tS"}}, {"sch", {"s", "k"}}, {"sh", {"S"}}, {"ch", {"tS"}},
-        {"th", {"T"}},   {"ph", {"f"}},       {"wh", {"w"}}, {"ck", {"k"}},
-        {"ng", {"N"}},   {"qu", {"k", "w"}},  {"gh", {}},    {"x", {"k", "s"}},
-        {"j", {"dZ"}},   {"q", {"k"}},        {"b", {"b"}},  {"d", {"d"}},
-        {"f", {"f"}},    {"h", {"h"}},        {"k", {"k"}},  {"l", {"l"}},
-        {"m", {"m"}},    {"n", {"n"}},        {"p", {"p"}},  {"r", {"r"}},
-        {"s", {"s"}},    {"t", {"t"}},        {"v", {"v"}},  {"w", {"w"}},
-        {"z", {"z"}},
-};
-
-bool StartsWith(const std::string& s, size_t at, const std::string& prefix) {
-  return s.compare(at, prefix.size(), prefix) == 0;
-}
-
-bool IsVowelLetter(char c) { return std::strchr("aeiou", c) != nullptr && c; }
-
-std::vector<std::string> WordPhones(const std::string& word) {
-  std::string w;
-  for (char c : word) w += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  if (StartsWith(w, 0, "kn") || StartsWith(w, 0, "wr") || StartsWith(w, 0, "gn")) {
-    w = w.substr(1);
-  }
-  bool silent_e = false;
-  if (w.size() >= 3 && w.back() == 'e' &&
-      std::strchr("aeiouy", w[w.size() - 2]) == nullptr) {
-    for (size_t i = 0; i + 2 < w.size(); ++i) {
-      if (std::strchr("aeiouy", w[i]) != nullptr) silent_e = true;
-    }
-  }
-  if (silent_e) w.pop_back();
-
-  std::vector<std::string> phones;
-  size_t i = 0;
-  while (i < w.size()) {
-    const char c = w[i];
-    if (i > 0 && c == w[i - 1] && !IsVowelLetter(c)) {
-      ++i;  // doubled consonant
-      continue;
-    }
-    if (c == 'y') {
-      const bool follows_vowel = i + 1 < w.size() && IsVowelLetter(w[i + 1]);
-      if (i == 0 || follows_vowel) {
-        phones.push_back("y");
-      } else {
-        phones.push_back(i == w.size() - 1 ? "i" : "I");
-      }
-      ++i;
-      continue;
-    }
-    if (c == 'c') {
-      const char next = i + 1 < w.size() ? w[i + 1] : '\0';
-      if (next == 'h') {
-        phones.push_back("tS");
-        i += 2;
-      } else if (next == 'k') {
-        phones.push_back("k");
-        i += 2;
-      } else {
-        phones.push_back(next == 'e' || next == 'i' || next == 'y' ? "s" : "k");
-        ++i;
-      }
-      continue;
-    }
-    if (c == 'g' && i + 1 < w.size() &&
-        (w[i + 1] == 'e' || w[i + 1] == 'i' || w[i + 1] == 'y')) {
-      phones.push_back("dZ");
-      ++i;
-      continue;
-    }
-    bool matched = false;
-    for (const auto& [graph, vowel] : kVowelGraphemes) {
-      if (StartsWith(w, i, graph)) {
-        std::string v = vowel;
-        if (graph == "o" && i == w.size() - 1) {
-          v = "o";  // go, hello
-        } else if (graph == "e" && i == w.size() - 1 && !silent_e) {
-          v = "i";  // me, we, be
-        }
-        phones.push_back(v);
-        i += graph.size();
-        matched = true;
-        break;
-      }
-    }
-    if (matched) continue;
-    for (const auto& [graph, cons] : kConsonantGraphemes) {
-      if (StartsWith(w, i, graph)) {
-        phones.insert(phones.end(), cons.begin(), cons.end());
-        i += graph.size();
-        matched = true;
-        break;
-      }
-    }
-    if (!matched) ++i;
-  }
-  if (silent_e) {
-    for (auto it = phones.rbegin(); it != phones.rend(); ++it) {
-      if (IsVowel(*it)) {
-        auto found = kLong.find(*it);
-        if (found != kLong.end()) *it = found->second;
-        break;
-      }
-    }
-  }
-  return phones;
-}
-
-std::vector<Syllable> WordSyllables(const std::string& word) {
-  const std::vector<std::string> phones = WordPhones(word);
-  if (std::none_of(phones.begin(), phones.end(), IsVowel)) {
-    // "brb", "hmm", "psst": no vowel to babble, so read the letters.
-    std::vector<Syllable> letters;
-    for (char c : word) {
-      auto found = kLetters.find(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-      if (found != kLetters.end()) letters.push_back(found->second);
-    }
-    return letters;
-  }
-  std::vector<Syllable> syllables;
-  std::vector<std::string> pending;
-  for (const std::string& p : phones) {
-    if (IsVowel(p)) {
-      // At most two consonants open a syllable; extras close the last one.
-      const size_t onset_len = pending.size() > 1 ? 2 : pending.size();
-      const size_t spill = pending.size() - onset_len;
-      if (spill > 0 && !syllables.empty()) {
-        auto& coda = syllables.back().coda;
-        coda.insert(coda.end(), pending.begin(), pending.begin() + spill);
-      }
-      syllables.push_back({{pending.begin() + spill, pending.end()}, p, {}});
-      pending.clear();
-    } else {
-      pending.push_back(p);
-    }
-  }
-  if (!pending.empty()) {
-    auto& coda = syllables.back().coda;
-    coda.insert(coda.end(), pending.begin(), pending.end());
-  }
-  return syllables;
-}
 
 // --------------------------------------------------------------------------
 // Utterance plan
@@ -444,26 +281,17 @@ std::vector<Unit> Plan(const std::string& text, const std::string& style,
       if (!items.empty() && !items.back().first.pause) {
         Unit gap;
         gap.pause = true;
-        gap.slots = style == "nh" ? 0.45 : 0.8;
+        gap.slots = 0.8;
         items.push_back({gap, -1});
       }
-      if (style == "nh") {
-        for (const Syllable& s : WordSyllables(word.text)) {
-          Unit u;
-          u.syllable = s;
-          u.slots = 1.3 * (1.0 + 0.3 * (s.onset.size() + s.coda.size()));
-          items.push_back({u, static_cast<int>(wi)});
-        }
-      } else {
-        for (char ch : word.text) {
-          const char lower = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-          auto found = kLetters.find(lower);
-          if (found == kLetters.end()) continue;
-          Unit u;
-          u.syllable = style == "bebebese" ? kBe : found->second;
-          u.letter = lower;
-          items.push_back({u, static_cast<int>(wi)});
-        }
+      for (char ch : word.text) {
+        const char lower = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        auto found = kLetters.find(lower);
+        if (found == kLetters.end()) continue;
+        Unit u;
+        u.syllable = found->second;
+        u.letter = lower;
+        items.push_back({u, static_cast<int>(wi)});
       }
     }
     Prosody(sentence, items, style, voice, rng);
@@ -1271,10 +1099,8 @@ std::vector<float> Synthesize(const std::string& utf8, const VoiceSettings& sett
   for (const Unit& u : units) total_slots += u.slots;
   std::vector<double> out(static_cast<size_t>((total_slots * slot + 0.3) * kSampleRate) +
                           kSampleRate / 10);
-  const bool use_custom_pack = pack != nullptr && !pack->empty() && settings.style == "classic";
-  const AnimaleseBank* bank = (!use_custom_pack && (settings.style == "classic" || settings.style == "bebebese"))
-                                  ? GetAnimaleseBank(settings.lang, settings.voice)
-                                  : nullptr;
+  const bool use_custom_pack = pack != nullptr && !pack->empty();
+  const AnimaleseBank* bank = (!use_custom_pack) ? GetAnimaleseBank(settings.lang, settings.voice) : nullptr;
   const bool use_bank = (bank != nullptr && !bank->empty());
   double cursor = 0;
   for (const Unit& u : units) {

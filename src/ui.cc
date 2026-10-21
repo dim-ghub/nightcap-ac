@@ -638,12 +638,6 @@ void TTSPage(Config& cfg) {
     EndRow(row);
   } else if (cfg.engine == "animalese") {
     Header("Animal Crossing Settings");
-    const auto style_keys = Labels(Styles(), [](const StyleInfo& s) { return std::string(s.key); });
-    int style = IndexOf(style_keys, cfg.style);
-    row = BeginRow("Game Style", "Which Animal Crossing game the voice copies");
-    Picker(row, Labels(Styles(), [](const StyleInfo& s) { return std::string(s.label); }), &style);
-    cfg.style = style_keys[style];
-    EndRow(row);
 
     const auto voice_keys = Labels(Voices(), [](const VoiceInfo& v) { return std::string(v.key); });
     int voice = IndexOf(voice_keys, cfg.voice);

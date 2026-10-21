@@ -17,9 +17,9 @@ Nightcap. It requires no virtual audio cables, no virtual microphone, and no sep
 * **Local Text-to-Speech Engines:**
   * **Piper TTS (Neural AI):** High-quality, natural offline AI voices (Lessac, Amy, Ryan, etc.) running locally with ONNX models. Fast, low latency, and realistic.
   * **eSpeak-NG (Retro / Lightweight):** Fast, classic synthesized speech with support for many accents and languages (US English, British, Scottish, Spanish, French, German, Japanese, etc.), pitch, and WPM speed adjustments.
-  * **Animal Crossing (Animalese):** Turn your chat into Animalese blips!
-    * Choose between *Classic* (GC / WW / CF / NL), *New Horizons* (syllable babble with sentence melody), or *Bebebese*.
-    * Select villager personalities (Normal, Peppy, Snooty, Sisterly, Lazy, Jock, Smug, Cranky).
+  * **Animal Crossing (Animalese):** Turn your chat into authentic Animal Crossing villager voices!
+    * Choose between English and Korean authentic sound banks.
+    * Select villager personalities (Female 1–4, Male 1–4: Normal, Peppy, Snooty, Sisterly, Lazy, Jock, Smug, Cranky).
     * Load custom letter sound packs (`a.wav`...`z.wav`).
 * **In-Game Roblox Overlay:**
   * Press **F8** (or click the top bar button) to open the 3-tab in-game menu: **TTS**, **Output**, and **Settings**.
@@ -102,7 +102,7 @@ Press **F8** or click the top-bar button to open the menu.
    * **Active Engine Settings:** Each engine only displays its own controls when active:
      * *Piper*: Voice model picker, custom model file path, speed multiplier, binary status.
      * *eSpeak-NG*: Voice/accent picker, speed (WPM), pitch slider.
-     * *Animal Crossing*: Game style (Classic, NH, Bebebese), villager personality, pitch, speed, and letter samples pack.
+     * *Animal Crossing*: Villager personality (F1–F4, M1–M4), language (English/Korean), pitch, speed, and letter samples pack.
    * **Test Voice & Stop Controls:** Immediate auditioning and audio playback controls.
 
 <p align="center">
