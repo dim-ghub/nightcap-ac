@@ -8,18 +8,9 @@ Roblox's own.
 Vox TTS (formerly Nightcap AC) is one library, `libvox_tts.so`, loaded into an unmodified
 Nightcap. It requires no virtual audio cables, no virtual microphone, and no separate app.
 
-```
- Nightcap (unmodified)
- ┌──────────────────────────────────────────────────────────────────────┐
- │  libSDL3 ◄─── libvox_tts.so (LD_PRELOAD)                             │
- │                 · chat box text ──► TTS engines (Piper / eSpeak / AC) ─┤ │
- │                 · mic samples   ◄── mixed in ◄─────────────────────┤ │
- │                                                                    ▼ │
- │                                                                speakers
- │  Vulkan  ◄─── same library as a Vulkan layer                         │
- │                 · in-game menu drawn onto each frame                 │
- └──────────────────────────────────────────────────────────────────────┘
-```
+<p align="center">
+  <img src="docs/images/vox-tts-piper.png" alt="Vox TTS In-Game Menu" width="800">
+</p>
 
 ## Features
 
@@ -112,17 +103,31 @@ Press **F8** or click the top-bar button to open the menu.
      * *Piper*: Voice model picker, custom model file path, speed multiplier, binary status.
      * *eSpeak-NG*: Voice/accent picker, speed (WPM), pitch slider.
      * *Animal Crossing*: Game style (Classic, NH, Bebebese), villager personality, pitch, speed, and letter samples pack.
-   * **Test Message:** Type any message and press Enter to test speech immediately.
+   * **Test Voice & Stop Controls:** Immediate auditioning and audio playback controls.
+
+<p align="center">
+  <img src="docs/images/vox-tts-animal-crossing.png" alt="Animal Crossing Engine Settings" width="750">
+</p>
+
 2. **Output:**
    * **Play Voice In:** Voice Chat, Voice Chat + Me, or Only Me.
    * **Voice Chat / Local Volume:** Independent sliders.
    * **Keep Microphone On:** Allow speaking through real mic alongside synthetic speech.
    * **Voice Chat Status:** Live indicator showing if Roblox is currently capturing audio.
+
+<p align="center">
+  <img src="docs/images/vox-tts-output.png" alt="Audio Output Settings" width="750">
+</p>
+
 3. **Settings:**
    * **Skip Chat Commands:** Automatically ignore commands starting with `/` (e.g. `/e dance`).
    * **Menu Button Position:** Top Left, Top Right, or Hidden.
    * **Custom Piper Voices Folder:** Additional directory to scan for `.onnx` models.
    * **About:** Version info and status of the last message spoken.
+
+<p align="center">
+  <img src="docs/images/vox-tts-settings.png" alt="Overlay and Directory Settings" width="750">
+</p>
 
 ## Configuration & Migration
 
