@@ -10,6 +10,7 @@ namespace nac {
 
 struct Config {
   bool enabled = true;
+  bool intercept_chat = false;  // speak via TTS without sending text to game chat
   std::string output = "vc";  // "vc", "both" or "local"
   std::string engine = "espeak";  // "espeak", "piper" or "animalese"
 

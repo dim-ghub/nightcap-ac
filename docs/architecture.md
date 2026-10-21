@@ -41,8 +41,9 @@ Roblox chat text boxes open on keystroke (`/`) and commit on Enter.
 - `ChatTracker` mirrors the active Roblox text input field:
   - Tracks character insertions, deletions, cursor navigation, home/end, and word jumps.
   - On `Return` / `Enter`, the completed message buffer is emitted.
-  - If the message begins with `/` (and `skip_commands` is enabled in config), the message is ignored (e.g. `/e dance`, `/w user`).
+  - If the message begins with `/` (and `skip_commands` is enabled in config), the message is ignored by TTS and passed through to Roblox (e.g. `/e dance`, `/w user`).
   - Otherwise, the message is dispatched to the speech synthesis worker thread via `nac::Say()`.
+  - **Chat Interception (`intercept_chat`)**: When enabled, the `SDLK_RETURN` key event is dynamically transformed into `SDLK_ESCAPE` before reaching Roblox. This causes Roblox to close the chat box and discard the draft without sending it into the game chat, while Vox TTS speaks the message through TTS in voice chat.
 
 ### B. Microphone Audio Injection (`src/speech.cc`)
 - Nightcap opens the microphone capture stream via `SDL_OpenAudioDeviceStream()`.

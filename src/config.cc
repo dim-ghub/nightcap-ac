@@ -135,6 +135,7 @@ Config Config::Load() {
     if (it != v.end()) *out = it->second == "true";
   };
   flag("enabled", &c.enabled);
+  flag("intercept_chat", &c.intercept_chat);
   str("output", &c.output);
   str("engine", &c.engine);
 
@@ -177,6 +178,7 @@ bool Config::Save() const {
   };
   std::string json = "{\n";
   json += "  \"enabled\": " + std::string(enabled ? "true" : "false") + ",\n";
+  json += "  \"intercept_chat\": " + std::string(intercept_chat ? "true" : "false") + ",\n";
   json += "  \"output\": " + Quote(output) + ",\n";
   json += "  \"engine\": " + Quote(engine) + ",\n";
   json += "  \"piper_model\": " + Quote(piper_model) + ",\n";

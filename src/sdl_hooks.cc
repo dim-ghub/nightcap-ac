@@ -40,28 +40,50 @@ void OnSent(const std::string& message) {
   Say(message);
 }
 
-void ObserveChat(const SDL_Event& e) {
+bool g_intercepting_return = false;
+
+void ObserveChat(SDL_Event& e) {
   if (!g_chat.active()) return;
   if (e.type == SDL_EVENT_TEXT_INPUT && e.text.text != nullptr) {
     g_chat.Text(e.text.text);
     return;
   }
-  if (e.type != SDL_EVENT_KEY_DOWN) return;
-  const bool ctrl = (e.key.mod & SDL_KMOD_CTRL) != 0;
-  std::optional<std::string> sent;
-  switch (e.key.key) {
-    case SDLK_RETURN:
-    case SDLK_KP_ENTER: sent = g_chat.Key(ChatKey::kReturn, ctrl); break;
-    case SDLK_ESCAPE: g_chat.Key(ChatKey::kEscape, ctrl); break;
-    case SDLK_BACKSPACE: g_chat.Key(ChatKey::kBackspace, ctrl); break;
-    case SDLK_DELETE: g_chat.Key(ChatKey::kDelete, ctrl); break;
-    case SDLK_LEFT: g_chat.Key(ChatKey::kLeft, ctrl); break;
-    case SDLK_RIGHT: g_chat.Key(ChatKey::kRight, ctrl); break;
-    case SDLK_HOME: g_chat.Key(ChatKey::kHome, ctrl); break;
-    case SDLK_END: g_chat.Key(ChatKey::kEnd, ctrl); break;
-    default: break;
+  if (e.type != SDL_EVENT_KEY_DOWN && e.type != SDL_EVENT_KEY_UP) return;
+
+  const Config cfg = GetConfig();
+
+  if (e.type == SDL_EVENT_KEY_DOWN) {
+    const bool ctrl = (e.key.mod & SDL_KMOD_CTRL) != 0;
+    std::optional<std::string> sent;
+    switch (e.key.key) {
+      case SDLK_RETURN:
+      case SDLK_KP_ENTER: sent = g_chat.Key(ChatKey::kReturn, ctrl); break;
+      case SDLK_ESCAPE: g_chat.Key(ChatKey::kEscape, ctrl); break;
+      case SDLK_BACKSPACE: g_chat.Key(ChatKey::kBackspace, ctrl); break;
+      case SDLK_DELETE: g_chat.Key(ChatKey::kDelete, ctrl); break;
+      case SDLK_LEFT: g_chat.Key(ChatKey::kLeft, ctrl); break;
+      case SDLK_RIGHT: g_chat.Key(ChatKey::kRight, ctrl); break;
+      case SDLK_HOME: g_chat.Key(ChatKey::kHome, ctrl); break;
+      case SDLK_END: g_chat.Key(ChatKey::kEnd, ctrl); break;
+      default: break;
+    }
+    if (sent) {
+      const bool is_command = cfg.skip_commands && !sent->empty() && (*sent)[0] == '/';
+      OnSent(*sent);
+      if (cfg.enabled && cfg.intercept_chat && !is_command) {
+        g_intercepting_return = true;
+        // Transform Return into Escape so Roblox discards the message instead of sending it to text chat
+        e.key.key = SDLK_ESCAPE;
+        e.key.scancode = SDL_SCANCODE_ESCAPE;
+      }
+    }
+  } else if (e.type == SDL_EVENT_KEY_UP) {
+    if (g_intercepting_return && (e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER)) {
+      g_intercepting_return = false;
+      e.key.key = SDLK_ESCAPE;
+      e.key.scancode = SDL_SCANCODE_ESCAPE;
+    }
   }
-  if (sent) OnSent(*sent);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +159,7 @@ void TrackWindow(SDL_WindowID id) {
 }
 
 // Returns true when the event belongs to us and must not reach Nightcap.
-bool Filter(const SDL_Event& e) {
+bool Filter(SDL_Event& e) {
   switch (e.type) {
     case SDL_EVENT_KEY_DOWN:
     case SDL_EVENT_KEY_UP: TrackWindow(e.key.windowID); break;

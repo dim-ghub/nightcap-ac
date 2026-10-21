@@ -73,7 +73,12 @@ int main(int argc, char** argv) {
     }
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
-      if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_RETURN) SDL_StopTextInput(window);
+      if (e.type == SDL_EVENT_KEY_DOWN) {
+        std::fprintf(stderr, "driver received key: %d\n", static_cast<int>(e.key.key));
+        if (e.key.key == SDLK_RETURN || e.key.key == SDLK_ESCAPE) {
+          SDL_StopTextInput(window);
+        }
+      }
     }
     SDL_Delay(5);
   }

@@ -158,12 +158,12 @@ class OverlayTest(unittest.TestCase):
             self.assertGreater(tab_underline_y(early) or 10**6, tab_underline_y(settled))
 
 
-def capture(tmp: Path, keep_mic: bool, message="Hello there, how are you?", engine=None):
+def capture(tmp: Path, keep_mic: bool, message="Hello there, how are you?", engine=None, intercept_chat=False):
     # The mic plays a 300 Hz tone so "keep my microphone" is observable.
     tone = b"".join(struct.pack("<h", int(8000 * math.sin(2 * math.pi * 300 * i / 48000)))
                     for i in range(48000 * 8))
     (tmp / "micin.raw").write_bytes(tone)
-    cfg_data = {"enabled": True, "output": "vc", "mix_real_mic": keep_mic}
+    cfg_data = {"enabled": True, "output": "vc", "mix_real_mic": keep_mic, "intercept_chat": intercept_chat}
     if engine is not None:
         cfg_data["engine"] = engine
     config = json.dumps(cfg_data)
@@ -208,6 +208,22 @@ class MicTest(unittest.TestCase):
             r, audio = capture(Path(t), keep_mic=False, message="/e dance")
             self.assertNotIn("speaking a chat message", r.stderr)
             self.assertLess(level(audio, 1.3, 3.0), 0.001)
+
+    def test_intercept_chat_cancels_text_and_plays_speech(self):
+        with tempdir() as t:
+            r, audio = capture(Path(t), keep_mic=False, message="Intercepted voice", intercept_chat=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("speaking a chat message", r.stderr)
+            self.assertIn("driver received key: 27", r.stderr, "Return transformed into Escape")
+            self.assertNotIn("driver received key: 13", r.stderr)
+            self.assertGreater(level(audio, 1.3, 3.0), 0.05, "speech is in the mic stream")
+
+    def test_normal_chat_sends_return_key(self):
+        with tempdir() as t:
+            r, audio = capture(Path(t), keep_mic=False, message="Normal voice", intercept_chat=False)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("speaking a chat message", r.stderr)
+            self.assertIn("driver received key: 13", r.stderr, "Return key reaches the game")
 
 
 if __name__ == "__main__":

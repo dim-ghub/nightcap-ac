@@ -714,7 +714,11 @@ void OutputPage(Config& cfg) {
 
 void SettingsPage(Config& cfg) {
   Header("Chat", true);
-  Row row = BeginRow("Skip Chat Commands", "Don't speak messages that start with /, like /e dance");
+  Row row = BeginRow("Intercept Chat", "Speak messages via TTS instead of sending them to Roblox chat");
+  Switch(row, &cfg.intercept_chat);
+  EndRow(row);
+
+  row = BeginRow("Skip Chat Commands", "Don't speak messages that start with /, like /e dance");
   Switch(row, &cfg.skip_commands);
   EndRow(row);
 
@@ -743,7 +747,7 @@ void SettingsPage(Config& cfg) {
 }
 
 bool Same(const Config& a, const Config& b) {
-  return a.enabled == b.enabled && a.output == b.output && a.engine == b.engine &&
+  return a.enabled == b.enabled && a.intercept_chat == b.intercept_chat && a.output == b.output && a.engine == b.engine &&
          a.piper_model == b.piper_model && a.piper_dir == b.piper_dir &&
          a.piper_speed == b.piper_speed && a.espeak_voice == b.espeak_voice &&
          a.espeak_speed == b.espeak_speed && a.espeak_pitch == b.espeak_pitch &&

@@ -18,6 +18,7 @@ Below is an example configuration file with default values:
 ```json
 {
   "enabled": true,
+  "intercept_chat": false,
   "output": "vc",
   "engine": "piper",
 
@@ -52,6 +53,7 @@ Below is an example configuration file with default values:
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `enabled` | boolean | `true` | Master switch for Text-to-Speech synthesis. |
+| `intercept_chat` | boolean | `false` | When true, chat messages are spoken via TTS and intercepted so they are not sent to Roblox text chat. |
 | `output` | string | `"vc"` | Routing destination for speech audio. Options: `"vc"` (Voice Chat only), `"both"` (Voice Chat and local speakers), `"local"` (Speakers only). |
 | `engine` | string | `"piper"` | Active speech engine: `"piper"` (Piper Neural), `"espeak"` (eSpeak-NG), or `"animalese"` (Animal Crossing). |
 | `skip_commands` | boolean | `true` | If true, messages starting with `/` (e.g. `/e dance`, `/w player`) are ignored and not spoken aloud. |

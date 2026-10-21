@@ -120,6 +120,7 @@ Press **F8** or click the top-bar button to open the menu.
 </p>
 
 3. **Settings:**
+   * **Intercept Chat:** Speak messages via TTS instead of sending them to Roblox text chat.
    * **Skip Chat Commands:** Automatically ignore commands starting with `/` (e.g. `/e dance`).
    * **Menu Button Position:** Top Left, Top Right, or Hidden.
    * **Custom Piper Voices Folder:** Additional directory to scan for `.onnx` models.
