@@ -45,7 +45,7 @@ $(LEGACY_LIB): $(LIB)
 
 build/vox-tts-render: tools/render.cc src/synth.cc src/synth.h
 	@mkdir -p build
-	$(CXX) $(CXXFLAGS) -std=c++17 -Wall -Wextra -o $@ tools/render.cc src/synth.cc
+	$(CXX) $(CXXFLAGS) -std=c++17 -Wall -Wextra -o $@ tools/render.cc src/synth.cc -lm
 
 build/nightcap-ac-render: build/vox-tts-render
 	ln -sf vox-tts-render $@
@@ -92,6 +92,10 @@ install: build
 	install -Dm644 packaging/nightcap_ac_layer.json.in $(PREFIX)/share/nightcap-ac/nightcap_ac_layer.json.in
 	install -Dm644 packaging/vox-tts.desktop $(PREFIX)/share/applications/vox-tts.desktop
 	install -Dm644 packaging/nightcap-ac.desktop $(PREFIX)/share/applications/nightcap-ac.desktop
+	@mkdir -p $(PREFIX)/share/vox-tts/voices/animalese/english
+	@mkdir -p $(PREFIX)/share/vox-tts/voices/animalese/korean
+	install -Dm644 assets/voices/animalese/english/*.ogg $(PREFIX)/share/vox-tts/voices/animalese/english/
+	install -Dm644 assets/voices/animalese/korean/*.ogg $(PREFIX)/share/vox-tts/voices/animalese/korean/
 	@# Clean up any old standalone leftovers
 	-@pkill -TERM -f '^/usr/bin/python3 -m nightcap_ac' 2>/dev/null || true
 	rm -rf $(PREFIX)/share/nightcap-ac/nightcap_ac $(PREFIX)/lib/nightcap-ac/libnightcap_ac_hook.so

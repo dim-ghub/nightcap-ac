@@ -152,6 +152,7 @@ Config Config::Load() {
   // Animalese settings
   str("voice", &c.voice);
   str("style", &c.style);
+  str("animalese_lang", &c.animalese_lang);
   num("pitch", &c.pitch);
   num("speed", &c.speed);
   str("sample_pack", &c.sample_pack);
@@ -189,6 +190,7 @@ bool Config::Save() const {
   json += "  \"espeak_pitch\": " + number(espeak_pitch) + ",\n";
   json += "  \"voice\": " + Quote(voice) + ",\n";
   json += "  \"style\": " + Quote(style) + ",\n";
+  json += "  \"animalese_lang\": " + Quote(animalese_lang) + ",\n";
   json += "  \"pitch\": " + number(pitch) + ",\n";
   json += "  \"speed\": " + number(speed) + ",\n";
   json += "  \"sample_pack\": " + Quote(sample_pack) + ",\n";

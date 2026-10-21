@@ -25,6 +25,7 @@ int main() {
     t.Text(" world");
     auto sent = t.Key(ChatKey::kReturn, false);
     Expect(sent && *sent == "hello world", "typed message is sent on Enter");
+    Expect(t.last_length() == 11, "last_length records character count");
   }
   {
     // Editing keys, including word jumps and deletes.

@@ -25,6 +25,7 @@ class ChatTracker {
   std::optional<std::string> Key(ChatKey key, bool ctrl);
 
   bool active() const { return active_; }
+  size_t last_length() const { return last_length_; }
 
  private:
   void Clear();
@@ -35,6 +36,7 @@ class ChatTracker {
   bool active_ = false;
   bool secret_ = false;
   bool multiline_ = false;
+  size_t last_length_ = 0;
   std::vector<std::string> chars_;  // one UTF-8 character per entry
   size_t cursor_ = 0;
 };

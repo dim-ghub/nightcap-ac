@@ -437,6 +437,7 @@ std::vector<float> SynthesizeSpeech(const std::string& text, const Config& cfg,
   VoiceSettings vs;
   vs.voice = cfg.voice;
   vs.style = cfg.style;
+  vs.lang = cfg.animalese_lang;
   vs.pitch = cfg.pitch;
   vs.speed = cfg.speed;
   return Synthesize(text, vs, std::random_device{}(), pack);

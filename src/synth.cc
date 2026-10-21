@@ -1,5 +1,8 @@
 #include "synth.h"
 
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -7,10 +10,20 @@
 #include <cstring>
 #include <fstream>
 #include <functional>
+#include <mutex>
 #include <random>
 
 namespace nac {
 namespace {
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wsign-compare"
+#pragma GCC diagnostic ignored "-Wshadow"
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#include "../third_party/stb_vorbis.c"
+#pragma GCC diagnostic pop
 
 constexpr double kPi = 3.14159265358979323846;
 
@@ -18,14 +31,14 @@ constexpr double kPi = 3.14159265358979323846;
 // Voices and styles
 
 const std::vector<VoiceInfo> kVoices = {
-    {"normal", "Normal", 430, 1.48, 15.0, 1.3, 0.06, 1.05},
-    {"peppy", "Peppy", 540, 1.58, 17.5, 2.1, 0.05, 0.95},
-    {"snooty", "Snooty", 390, 1.40, 13.5, 0.9, 0.08, 1.10},
-    {"sisterly", "Sisterly", 300, 1.30, 14.5, 1.1, 0.10, 1.10},
-    {"lazy", "Lazy", 205, 1.18, 11.5, 0.8, 0.07, 1.20},
-    {"jock", "Jock", 235, 1.22, 16.5, 1.7, 0.06, 1.05},
-    {"smug", "Smug", 215, 1.22, 13.5, 1.0, 0.06, 1.10},
-    {"cranky", "Cranky", 150, 1.08, 12.0, 0.7, 0.09, 1.30},
+    {"normal", "Female 1 (Normal / Sweet)", 430, 1.48, 15.0, 1.3, 0.06, 1.05},
+    {"peppy", "Female 2 (Peppy)", 540, 1.58, 17.5, 2.1, 0.05, 0.95},
+    {"sisterly", "Female 3 (Sisterly)", 300, 1.30, 14.5, 1.1, 0.10, 1.10},
+    {"snooty", "Female 4 (Snooty)", 390, 1.40, 13.5, 0.9, 0.08, 1.10},
+    {"jock", "Male 1 (Jock)", 235, 1.22, 16.5, 1.7, 0.06, 1.05},
+    {"lazy", "Male 2 (Lazy)", 205, 1.18, 11.5, 0.8, 0.07, 1.20},
+    {"smug", "Male 3 (Smug)", 215, 1.22, 13.5, 1.0, 0.06, 1.10},
+    {"cranky", "Male 4 (Cranky)", 105, 1.08, 12.0, 0.7, 0.09, 1.30},
 };
 
 const std::vector<StyleInfo> kStyles = {
@@ -866,12 +879,142 @@ bool ReadWav(const std::string& path, std::vector<double>* out, std::string* err
   return true;
 }
 
+class AnimaleseBank {
+ public:
+  bool Load(const std::string& path) {
+    samples_.clear();
+    short* raw = nullptr;
+    int channels = 0, sample_rate = 0;
+    int num_samples = stb_vorbis_decode_filename(path.c_str(), &channels, &sample_rate, &raw);
+    if (num_samples <= 0 || raw == nullptr) return false;
+    samples_.resize(num_samples);
+    for (int i = 0; i < num_samples; ++i) {
+      if (channels == 2) {
+        samples_[i] = static_cast<float>(((static_cast<double>(raw[i * 2]) +
+                                           static_cast<double>(raw[i * 2 + 1])) *
+                                          0.5) / 32768.0);
+      } else {
+        samples_[i] = static_cast<float>(static_cast<double>(raw[i]) / 32768.0);
+      }
+    }
+    free(raw);
+    return true;
+  }
+
+  bool empty() const { return samples_.empty(); }
+
+  std::vector<double> BlipSlice(int slice_idx, double dur, double rate, double gain) const {
+    if (samples_.empty()) return {};
+    if (slice_idx < 0 || slice_idx > 38) slice_idx = 4;
+    const size_t start = static_cast<size_t>(slice_idx * 9600);
+    size_t slice_len = (slice_idx >= 36) ? 28800 : 9600;
+    if (start >= samples_.size()) return {};
+    if (start + slice_len > samples_.size()) slice_len = samples_.size() - start;
+
+    const size_t n = static_cast<size_t>(dur * kSampleRate);
+    std::vector<double> out;
+    out.reserve(n);
+    for (size_t i = 0; i < n; ++i) {
+      const double pos = i * rate;
+      if (pos >= static_cast<double>(slice_len - 1)) break;
+      const size_t lo = static_cast<size_t>(pos);
+      const double frac = pos - lo;
+      const double s0 = samples_[start + lo];
+      const double s1 = samples_[start + lo + 1];
+      out.push_back(s0 * (1.0 - frac) + s1 * frac);
+    }
+    const size_t fade = std::min(out.size(), static_cast<size_t>(0.008 * kSampleRate));
+    for (size_t j = 0; j < fade; ++j) {
+      out[out.size() - fade + j] *= 1.0 - static_cast<double>(j) / std::max<size_t>(1, fade - 1);
+    }
+    for (double& v : out) v *= gain * 0.9;
+    return out;
+  }
+
+  std::vector<double> Blip(char c, double dur, double rate, double gain) const {
+    int slice = 4;
+    if (c >= 'a' && c <= 'z') slice = c - 'a';
+    else if (c >= 'A' && c <= 'Z') slice = c - 'A';
+    else if (c >= '1' && c <= '9') slice = 26 + (c - '1');
+    else if (c == '0') slice = 35;
+    else if (c == '!') slice = 37;
+    else if (c == '?') slice = 38;
+    return BlipSlice(slice, dur, rate, gain);
+  }
+
+ private:
+  std::vector<float> samples_;
+};
+
+std::string VoiceToFilename(const std::string& voice) {
+  if (voice == "peppy" || voice == "f2") return "f2.ogg";
+  if (voice == "sisterly" || voice == "f3") return "f3.ogg";
+  if (voice == "snooty" || voice == "f4") return "f4.ogg";
+  if (voice == "jock" || voice == "m1") return "m1.ogg";
+  if (voice == "lazy" || voice == "m2") return "m2.ogg";
+  if (voice == "smug" || voice == "m3") return "m3.ogg";
+  if (voice == "cranky" || voice == "m4") return "m4.ogg";
+  return "f1.ogg";
+}
+
+bool BankFileExists(const std::string& path) {
+  struct stat st {};
+  return stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode);
+}
+
+std::string ResolveAnimalesePath(const std::string& lang_in, const std::string& voice) {
+  const std::string lang = (lang_in == "korean" || lang_in == "ko") ? "korean" : "english";
+  const std::string file = VoiceToFilename(voice);
+  const char* home_env = std::getenv("HOME");
+  const std::string home = home_env ? home_env : "";
+  const std::string candidates[] = {
+      "assets/voices/animalese/" + lang + "/" + file,
+      "../assets/voices/animalese/" + lang + "/" + file,
+      "/usr/local/share/vox-tts/voices/animalese/" + lang + "/" + file,
+      "/usr/share/vox-tts/voices/animalese/" + lang + "/" + file,
+      home + "/.local/share/vox-tts/voices/animalese/" + lang + "/" + file,
+  };
+  for (const auto& c : candidates) {
+    if (BankFileExists(c)) return c;
+  }
+  return "";
+}
+
+std::mutex g_bank_mutex;
+std::map<std::pair<std::string, std::string>, AnimaleseBank> g_bank_cache;
+
+const AnimaleseBank* GetAnimaleseBank(const std::string& lang, const std::string& voice) {
+  std::lock_guard<std::mutex> lock(g_bank_mutex);
+  const std::string norm_lang = (lang == "korean" || lang == "ko") ? "korean" : "english";
+  const std::string file = VoiceToFilename(voice);
+  auto key = std::make_pair(norm_lang, file);
+  auto found = g_bank_cache.find(key);
+  if (found != g_bank_cache.end()) return &found->second;
+
+  const std::string path = ResolveAnimalesePath(norm_lang, voice);
+  if (path.empty()) return nullptr;
+
+  AnimaleseBank bank;
+  if (!bank.Load(path)) return nullptr;
+
+  auto res = g_bank_cache.emplace(key, std::move(bank));
+  return &res.first->second;
+}
+
 }  // namespace
 
 const std::vector<VoiceInfo>& Voices() { return kVoices; }
 const std::vector<StyleInfo>& Styles() { return kStyles; }
 
 const VoiceInfo& FindVoice(const std::string& key) {
+  if (key == "f1") return kVoices[0];
+  if (key == "f2") return kVoices[1];
+  if (key == "f3") return kVoices[2];
+  if (key == "f4") return kVoices[3];
+  if (key == "m1") return kVoices[4];
+  if (key == "m2") return kVoices[5];
+  if (key == "m3") return kVoices[6];
+  if (key == "m4") return kVoices[7];
   for (const VoiceInfo& v : kVoices) {
     if (key == v.key) return v;
   }
@@ -1036,10 +1179,42 @@ std::string Normalize(const std::string& utf8) {
       ascii += "...";
     } else if (cp == 0xA0 || cp == 0x2009 || cp == 0x202F || cp == 0x3000) {
       ascii += ' ';
+    } else if (cp >= 0xAC00 && cp <= 0xD7A3) {
+      // Korean Hangul syllables decomposed to standard 2-beolsik keyboard letter slices
+      static const char* kChoKeys[] = {"r", "r", "s", "e", "e", "f", "a", "q", "q", "t",
+                                        "t", "d", "w", "w", "c", "z", "x", "v", "g"};
+      static const char* kJungKeys[] = {"k", "o", "i", "o", "j", "p", "u", "p", "h", "hk",
+                                         "ho", "hl", "y", "n", "nj", "np", "nl", "b", "m", "ml", "l"};
+      static const char* kJongKeys[] = {"", "r", "r", "rt", "s", "sw", "sg", "e", "f", "fr",
+                                         "fa", "fq", "ft", "fx", "fv", "fg", "a", "q", "qt", "t",
+                                         "t", "d", "w", "c", "z", "x", "v", "g"};
+      uint32_t syl = cp - 0xAC00;
+      uint32_t cho = syl / 588;
+      uint32_t jung = (syl % 588) / 28;
+      uint32_t jong = syl % 28;
+      if (cho < 19) ascii += kChoKeys[cho];
+      if (jung < 21) ascii += kJungKeys[jung];
+      if (jong < 28) ascii += kJongKeys[jong];
+    } else if (cp >= 0x3131 && cp <= 0x314E) {
+      // Hangul compatibility jamo consonants
+      static const char* kJamoConsonants[] = {
+          "r", "r", "rt", "s", "sw", "sg", "e", "e", "f", "fr", "fa", "fq", "ft",
+          "fx", "fv", "fg", "a", "q", "q", "qt", "t", "t", "d", "w", "w", "c", "z", "x", "v", "g"
+      };
+      size_t idx = cp - 0x3131;
+      if (idx < sizeof(kJamoConsonants) / sizeof(kJamoConsonants[0])) ascii += kJamoConsonants[idx];
+    } else if (cp >= 0x314F && cp <= 0x3163) {
+      // Hangul compatibility jamo vowels
+      static const char* kJamoVowels[] = {
+          "k", "o", "i", "o", "j", "p", "u", "p", "h", "hk", "ho", "hl", "y", "n",
+          "nj", "np", "nl", "b", "m", "ml", "l"
+      };
+      size_t idx = cp - 0x314F;
+      if (idx < sizeof(kJamoVowels) / sizeof(kJamoVowels[0])) ascii += kJamoVowels[idx];
     } else if (const char* base = Unaccent(cp)) {
       ascii += base;
     }
-    // Anything else (emoji, CJK, symbols) is silent, like in-game.
+    // Anything else (emoji, symbols) is silent, like in-game.
   }
   // Numbers to words; long digit runs (codes, ids) read digit by digit.
   std::string spelled;
@@ -1096,7 +1271,11 @@ std::vector<float> Synthesize(const std::string& utf8, const VoiceSettings& sett
   for (const Unit& u : units) total_slots += u.slots;
   std::vector<double> out(static_cast<size_t>((total_slots * slot + 0.3) * kSampleRate) +
                           kSampleRate / 10);
-  const bool use_pack = pack != nullptr && !pack->empty() && settings.style == "classic";
+  const bool use_custom_pack = pack != nullptr && !pack->empty() && settings.style == "classic";
+  const AnimaleseBank* bank = (!use_custom_pack && (settings.style == "classic" || settings.style == "bebebese"))
+                                  ? GetAnimaleseBank(settings.lang, settings.voice)
+                                  : nullptr;
+  const bool use_bank = (bank != nullptr && !bank->empty());
   double cursor = 0;
   for (const Unit& u : units) {
     const double dur = u.slots * slot;
@@ -1104,9 +1283,12 @@ std::vector<float> Synthesize(const std::string& utf8, const VoiceSettings& sett
       const double semis = settings.pitch + u.pitch;
       const double blip_dur = dur * 1.12;  // neighbouring blips overlap a little
       std::vector<double> blip;
-      if (use_pack) {
+      if (use_custom_pack) {
         const double rate = std::pow(2.0, semis / 12.0) * (voice.f0 / 300.0);
         blip = pack->Blip(u.letter, blip_dur, rate, u.gain);
+      } else if (use_bank) {
+        const double rate = std::pow(2.0, semis / 12.0);
+        blip = bank->Blip(u.letter, blip_dur, rate, u.gain);
       } else {
         // Pitching a recording up also lifts its formants; follow the pitch
         // a little so high blips get brighter, like the games' samples.

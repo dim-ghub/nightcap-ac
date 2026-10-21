@@ -23,6 +23,7 @@ void ChatTracker::Open(bool secret, bool multiline) {
   active_ = true;
   secret_ = secret;
   multiline_ = multiline;
+  last_length_ = 0;
   Clear();
 }
 
@@ -86,6 +87,7 @@ std::optional<std::string> ChatTracker::Key(ChatKey key, bool ctrl) {
       }
       std::string message;
       for (const auto& c : chars_) message += c;
+      last_length_ = chars_.size();
       Clear();
       const size_t first = message.find_first_not_of(" \t\n");
       if (first == std::string::npos) return std::nullopt;

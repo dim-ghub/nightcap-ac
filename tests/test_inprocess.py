@@ -214,7 +214,8 @@ class MicTest(unittest.TestCase):
             r, audio = capture(Path(t), keep_mic=False, message="Intercepted voice", intercept_chat=True)
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertIn("speaking a chat message", r.stderr)
-            self.assertIn("driver received key: 27", r.stderr, "Return transformed into Escape")
+            self.assertIn("driver received key: 8", r.stderr, "Backspace sent to clear chat box")
+            self.assertIn("driver received key: 27", r.stderr, "Escape sent to close chat box")
             self.assertNotIn("driver received key: 13", r.stderr)
             self.assertGreater(level(audio, 1.3, 3.0), 0.05, "speech is in the mic stream")
 

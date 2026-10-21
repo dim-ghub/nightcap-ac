@@ -86,10 +86,11 @@ Below is an example configuration file with default values:
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `style` | string | `"classic"` | Game era style: `"classic"` (GC/WW/CF/NL), `"nh"` (New Horizons), or `"bebebese"`. |
-| `voice` | string | `"normal"` | Villager personality archetype: `"normal"`, `"peppy"`, `"snooty"`, `"sisterly"`, `"lazy"`, `"jock"`, `"smug"`, or `"cranky"`. |
+| `voice` | string | `"normal"` | Villager personality archetype or voice code: `"normal"` (`f1`), `"peppy"` (`f2`), `"sisterly"` (`f3`), `"snooty"` (`f4`), `"jock"` (`m1`), `"lazy"` (`m2`), `"smug"` (`m3`), or `"cranky"` (`m4`). |
+| `animalese_lang` | string | `"english"` | Authentic sound bank language: `"english"` or `"korean"`. |
 | `pitch` | float | `0.0` | Pitch offset in semitones ($-12$ to $+12$). |
 | `speed` | float | `1.0` | Tempo multiplier on the villager pace ($0.5$ to $2.0$). |
-| `sample_pack` | string | `""` | Path to a folder of `a.wav`...`z.wav` recordings or an `Animalese.js` sound sprite (Classic style only). |
+| `sample_pack` | string | `""` | Optional path to custom `a.wav`...`z.wav` recordings or an `Animalese.js` sound sprite (Classic style only). |
 
 ---
 

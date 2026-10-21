@@ -27,6 +27,7 @@ struct Config {
   // Animal Crossing (Animalese) settings
   std::string voice = "normal";
   std::string style = "classic";
+  std::string animalese_lang = "english";  // "english" or "korean"
   double pitch = 0.0;
   double speed = 1.0;
   std::string sample_pack;

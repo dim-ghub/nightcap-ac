@@ -652,6 +652,13 @@ void TTSPage(Config& cfg) {
     cfg.voice = voice_keys[voice];
     EndRow(row);
 
+    const std::vector<std::string> lang_keys = {"english", "korean"};
+    int lang_idx = IndexOf(lang_keys, cfg.animalese_lang);
+    row = BeginRow("Language", "Authentic English or Korean villager sound bank");
+    Picker(row, {"English", "Korean"}, &lang_idx);
+    cfg.animalese_lang = lang_keys[lang_idx];
+    EndRow(row);
+
     char sub[64];
     std::snprintf(sub, sizeof(sub), "%+.0f semitones", cfg.pitch);
     row = BeginRow("Pitch", sub);
@@ -751,8 +758,8 @@ bool Same(const Config& a, const Config& b) {
          a.piper_model == b.piper_model && a.piper_dir == b.piper_dir &&
          a.piper_speed == b.piper_speed && a.espeak_voice == b.espeak_voice &&
          a.espeak_speed == b.espeak_speed && a.espeak_pitch == b.espeak_pitch &&
-         a.voice == b.voice && a.style == b.style && a.pitch == b.pitch &&
-         a.speed == b.speed && a.vc_volume == b.vc_volume &&
+         a.voice == b.voice && a.style == b.style && a.animalese_lang == b.animalese_lang &&
+         a.pitch == b.pitch && a.speed == b.speed && a.vc_volume == b.vc_volume &&
          a.local_volume == b.local_volume && a.mix_real_mic == b.mix_real_mic &&
          a.skip_commands == b.skip_commands && a.sample_pack == b.sample_pack &&
          a.menu_button == b.menu_button;

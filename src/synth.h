@@ -48,6 +48,7 @@ const VoiceInfo& FindVoice(const std::string& key);
 struct VoiceSettings {
   std::string voice = "normal";
   std::string style = "classic";
+  std::string lang = "english";
   double pitch = 0.0;  // semitones on top of the voice
   double speed = 1.0;  // multiplier on the text-box speed
 };

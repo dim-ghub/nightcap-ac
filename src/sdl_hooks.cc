@@ -12,6 +12,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstring>
+#include <deque>
 #include <mutex>
 #include <unordered_set>
 
@@ -31,6 +33,7 @@ namespace {
 
 ChatTracker g_chat;              // main thread only
 bool g_roblox_text_active = false;
+SDL_WindowID g_window_id = 0;
 
 void OnSent(const std::string& message) {
   const Config cfg = GetConfig();
@@ -40,15 +43,72 @@ void OnSent(const std::string& message) {
   Say(message);
 }
 
-bool g_intercepting_return = false;
+// Injected synthetic events (for intercepting chat while clearing the text box).
+std::mutex g_injected_mutex;
+std::deque<SDL_Event> g_injected_events;
+bool g_swallow_return_up = false;
 
-void ObserveChat(SDL_Event& e) {
-  if (!g_chat.active()) return;
+bool PopInjectedEvent(SDL_Event* event) {
+  std::lock_guard<std::mutex> lock(g_injected_mutex);
+  if (g_injected_events.empty()) return false;
+  if (event != nullptr) {
+    *event = g_injected_events.front();
+  }
+  g_injected_events.pop_front();
+  return true;
+}
+
+void InjectKeyEvent(SDL_EventType type, SDL_Keycode key, SDL_Scancode scancode,
+                    SDL_Keymod mod, SDL_WindowID win) {
+  SDL_Event ev;
+  std::memset(&ev, 0, sizeof(ev));
+  ev.type = type;
+  ev.key.type = type;
+  ev.key.timestamp = SDL_GetTicksNS();
+  ev.key.windowID = win;
+  ev.key.key = key;
+  ev.key.scancode = scancode;
+  ev.key.mod = mod;
+  ev.key.down = (type == SDL_EVENT_KEY_DOWN);
+  ev.key.repeat = false;
+  g_injected_events.push_back(ev);
+}
+
+void InjectKeyPress(SDL_Keycode key, SDL_Scancode scancode, SDL_Keymod mod, SDL_WindowID win) {
+  InjectKeyEvent(SDL_EVENT_KEY_DOWN, key, scancode, mod, win);
+  InjectKeyEvent(SDL_EVENT_KEY_UP, key, scancode, mod, win);
+}
+
+void QueueClearAndCloseChat(SDL_WindowID win, size_t char_count) {
+  std::lock_guard<std::mutex> lock(g_injected_mutex);
+  g_injected_events.clear();
+
+  // 1. Select all text with Ctrl+A
+  InjectKeyEvent(SDL_EVENT_KEY_DOWN, SDLK_LCTRL, SDL_SCANCODE_LCTRL, SDL_KMOD_LCTRL, win);
+  InjectKeyEvent(SDL_EVENT_KEY_DOWN, SDLK_A, SDL_SCANCODE_A, SDL_KMOD_LCTRL, win);
+  InjectKeyEvent(SDL_EVENT_KEY_UP, SDLK_A, SDL_SCANCODE_A, SDL_KMOD_LCTRL, win);
+  InjectKeyEvent(SDL_EVENT_KEY_UP, SDLK_LCTRL, SDL_SCANCODE_LCTRL, 0, win);
+
+  // 2. Delete selected text with Backspace
+  InjectKeyPress(SDLK_BACKSPACE, SDL_SCANCODE_BACKSPACE, 0, win);
+
+  // 3. Extra backspaces to ensure all characters are erased even if Ctrl+A is unhandled
+  const size_t extra = std::min<size_t>(char_count + 2, 100);
+  for (size_t i = 0; i < extra; ++i) {
+    InjectKeyPress(SDLK_BACKSPACE, SDL_SCANCODE_BACKSPACE, 0, win);
+  }
+
+  // 4. Close the chatbox by sending Escape
+  InjectKeyPress(SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0, win);
+}
+
+bool ObserveChat(SDL_Event& e) {
+  if (!g_chat.active()) return false;
   if (e.type == SDL_EVENT_TEXT_INPUT && e.text.text != nullptr) {
     g_chat.Text(e.text.text);
-    return;
+    return false;
   }
-  if (e.type != SDL_EVENT_KEY_DOWN && e.type != SDL_EVENT_KEY_UP) return;
+  if (e.type != SDL_EVENT_KEY_DOWN && e.type != SDL_EVENT_KEY_UP) return false;
 
   const Config cfg = GetConfig();
 
@@ -71,25 +131,24 @@ void ObserveChat(SDL_Event& e) {
       const bool is_command = cfg.skip_commands && !sent->empty() && (*sent)[0] == '/';
       OnSent(*sent);
       if (cfg.enabled && cfg.intercept_chat && !is_command) {
-        g_intercepting_return = true;
-        // Transform Return into Escape so Roblox discards the message instead of sending it to text chat
-        e.key.key = SDLK_ESCAPE;
-        e.key.scancode = SDL_SCANCODE_ESCAPE;
+        g_swallow_return_up = true;
+        const size_t count = g_chat.last_length() > 0 ? g_chat.last_length() : sent->size();
+        QueueClearAndCloseChat(e.key.windowID ? e.key.windowID : g_window_id, count);
+        return true;  // Swallow Return key down
       }
     }
   } else if (e.type == SDL_EVENT_KEY_UP) {
-    if (g_intercepting_return && (e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER)) {
-      g_intercepting_return = false;
-      e.key.key = SDLK_ESCAPE;
-      e.key.scancode = SDL_SCANCODE_ESCAPE;
+    if (g_swallow_return_up && (e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER)) {
+      g_swallow_return_up = false;
+      return true;  // Swallow Return key up
     }
   }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
 // Menu and cursor
 
-SDL_WindowID g_window_id = 0;
 // What Nightcap last asked for while the menu held the cursor.
 bool g_want_relative = false;
 bool g_want_cursor_visible = true;
@@ -193,7 +252,7 @@ bool Filter(SDL_Event& e) {
       g_swallow_button_up = false;
       return true;
     }
-    ObserveChat(e);
+    if (ObserveChat(e)) return true;
     return false;
   }
 
@@ -341,8 +400,10 @@ EXPORT bool SDL_PollEvent(SDL_Event* event) {
   Cached(fn, "SDL_PollEvent");
   MainThreadTick();
   if (event == nullptr) return fn(nullptr);
+  if (PopInjectedEvent(event)) return true;
   while (fn(event)) {
     if (!Filter(*event)) return true;
+    if (PopInjectedEvent(event)) return true;
   }
   return false;
 }
@@ -352,8 +413,10 @@ EXPORT bool SDL_WaitEvent(SDL_Event* event) {
   Cached(fn, "SDL_WaitEvent");
   MainThreadTick();
   if (event == nullptr) return fn(nullptr);
+  if (PopInjectedEvent(event)) return true;
   while (fn(event)) {
     if (!Filter(*event)) return true;
+    if (PopInjectedEvent(event)) return true;
   }
   return false;
 }
@@ -363,8 +426,10 @@ EXPORT bool SDL_WaitEventTimeout(SDL_Event* event, Sint32 timeout_ms) {
   Cached(fn, "SDL_WaitEventTimeout");
   MainThreadTick();
   if (event == nullptr) return fn(nullptr, timeout_ms);
+  if (PopInjectedEvent(event)) return true;
   while (fn(event, timeout_ms)) {
     if (!Filter(*event)) return true;
+    if (PopInjectedEvent(event)) return true;
     timeout_ms = 0;  // one consumed event already used up the wait
   }
   return false;
@@ -373,13 +438,27 @@ EXPORT bool SDL_WaitEventTimeout(SDL_Event* event, Sint32 timeout_ms) {
 EXPORT int SDL_PeepEvents(SDL_Event* events, int numevents, SDL_EventAction action,
                           Uint32 min_type, Uint32 max_type) {
   static int (*fn)(SDL_Event*, int, SDL_EventAction, Uint32, Uint32);
+  if (action == SDL_GETEVENT && events != nullptr && numevents > 0) {
+    int injected_count = 0;
+    while (injected_count < numevents) {
+      if (!PopInjectedEvent(&events[injected_count])) break;
+      ++injected_count;
+    }
+    if (injected_count > 0) return injected_count;
+  }
   const int count = Cached(fn, "SDL_PeepEvents")(events, numevents, action, min_type, max_type);
   // Only removed events count; a peek would see the same event again later.
   if (action != SDL_GETEVENT || events == nullptr || count <= 0) return count;
   MainThreadTick();
   int kept = 0;
   for (int i = 0; i < count; ++i) {
-    if (!Filter(events[i])) events[kept++] = events[i];
+    if (!Filter(events[i])) {
+      events[kept++] = events[i];
+    } else {
+      while (kept < numevents && PopInjectedEvent(&events[kept])) {
+        ++kept;
+      }
+    }
   }
   return kept;
 }

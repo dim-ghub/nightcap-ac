@@ -9,12 +9,12 @@ import os
 
 RENDER = BUILD / "nightcap-ac-render"
 SR = 48000
-VOICE_F0 = {"normal": 430, "peppy": 540, "cranky": 150}
+VOICE_F0 = {"normal": 430, "peppy": 540, "cranky": 105}
 
 
-def render(tmp, text, voice="normal", style="classic", pitch=0, speed=1):
+def render(tmp, text, voice="normal", style="classic", pitch=0, speed=1, lang="english"):
     out = Path(tmp) / "out.wav"
-    r = run([str(RENDER), str(out), text, voice, style, str(pitch), str(speed)], dict(os.environ))
+    r = run([str(RENDER), str(out), text, voice, style, str(pitch), str(speed), lang], dict(os.environ))
     assert r.returncode == 0, r.stderr
     with wave.open(str(out)) as w:
         frames = w.readframes(w.getnframes())
@@ -60,6 +60,20 @@ class SynthTest(unittest.TestCase):
     def test_silent_input(self):
         with tempdir() as tmp:
             self.assertEqual(render(tmp, "😀 ... !!"), [])
+
+    def test_korean_speech_speaks(self):
+        with tempdir() as tmp:
+            audio = render(tmp, "안녕하세요 만나서 반갑습니다", lang="korean")
+            self.assertGreater(len(audio), SR // 2)
+            self.assertGreater(rms(audio), 0.05)
+
+    def test_all_authentic_voices_speak(self):
+        with tempdir() as tmp:
+            for voice in ("f1", "f2", "f3", "f4", "m1", "m2", "m3", "m4",
+                          "normal", "peppy", "sisterly", "snooty", "jock", "lazy", "smug", "cranky"):
+                audio = render(tmp, "Hello there!", voice=voice, lang="english")
+                self.assertGreater(len(audio), SR // 4, voice)
+                self.assertGreater(rms(audio), 0.02, voice)
 
 
 if __name__ == "__main__":
