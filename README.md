@@ -50,7 +50,7 @@ Nightcap. It requires no virtual audio cables, no virtual microphone, and no sep
 ## Install
 
 ```bash
-git clone https://github.com/dim-ghub/nightcap-ac vox-tts
+git clone https://github.com/dim-ghub/vox-tts
 cd vox-tts
 make build
 make install          # into ~/.local (PREFIX=... to change)
