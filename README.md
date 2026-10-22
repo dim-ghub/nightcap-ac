@@ -1,4 +1,8 @@
-# Vox TTS
+<p align="center">
+  <img src="assets/vox-tts.svg" width="140" alt="Vox TTS Logo">
+</p>
+
+<h1 align="center">Vox TTS</h1>
 
 Every chat message you send in Roblox (through [Nightcap](https://github.com/CoderDayton/nightcap))
 is synthesized into voice chat using fast, local Text-to-Speech (TTS). You can also

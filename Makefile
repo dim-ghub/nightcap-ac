@@ -91,6 +91,7 @@ install: build
 	@mkdir -p $(PREFIX)/share/nightcap-ac
 	install -Dm644 packaging/nightcap_ac_layer.json.in $(PREFIX)/share/nightcap-ac/nightcap_ac_layer.json.in
 	install -Dm644 packaging/vox-tts.desktop $(PREFIX)/share/applications/vox-tts.desktop
+	install -Dm644 assets/vox-tts.svg $(PREFIX)/share/icons/hicolor/scalable/apps/vox-tts.svg
 	install -Dm644 packaging/nightcap-ac.desktop $(PREFIX)/share/applications/nightcap-ac.desktop
 	@mkdir -p $(PREFIX)/share/vox-tts/voices/animalese/english
 	@mkdir -p $(PREFIX)/share/vox-tts/voices/animalese/korean
@@ -150,6 +151,7 @@ unpatch-desktop:
 uninstall: unpatch-desktop
 	rm -f $(BINDIR)/vox-tts $(BINDIR)/vox-tts-download-voice $(BINDIR)/nightcap-ac
 	rm -f $(PREFIX)/share/applications/vox-tts.desktop $(PREFIX)/share/applications/nightcap-ac.desktop
+	rm -f $(PREFIX)/share/icons/hicolor/scalable/apps/vox-tts.svg
 	rm -rf $(PREFIX)/lib/vox-tts $(PREFIX)/lib/nightcap-ac $(PREFIX)/share/vox-tts $(PREFIX)/share/nightcap-ac
 
 clean:
